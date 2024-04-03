@@ -45,8 +45,7 @@ async fn main() -> Result<(), ServerError> {
                 .long("model-name")
                 .value_name("MODEL-NAME")
                 .value_delimiter(',')
-                .help("Sets single or multiple model names")
-                .default_value("default"),
+                .help("Sets names for chat and embedding models. The names are separated by comma without space, for example, 'Llama-2-7b,all-minilm'.")
         )
         .arg(
             Arg::new("model_alias")
@@ -64,75 +63,8 @@ async fn main() -> Result<(), ServerError> {
                 .value_name("CTX_SIZE")
                 .value_delimiter(',')
                 .value_parser(clap::value_parser!(u64))
-                .help("Sets the prompt context size")
-                .default_value("512"),
-        )
-        .arg(
-            Arg::new("n_predict")
-                .short('n')
-                .long("n-predict")
-                .value_parser(clap::value_parser!(u64))
-                .value_name("N_PRDICT")
-                .help("Number of tokens to predict")
-                .default_value("1024"),
-        )
-        .arg(
-            Arg::new("n_gpu_layers")
-                .short('g')
-                .long("n-gpu-layers")
-                .value_parser(clap::value_parser!(u64))
-                .value_name("N_GPU_LAYERS")
-                .help("Number of layers to run on the GPU")
-                .default_value("100"),
-        )
-        .arg(
-            Arg::new("batch_size")
-                .short('b')
-                .long("batch-size")
-                .value_parser(clap::value_parser!(u64))
-                .value_name("BATCH_SIZE")
-                .help("Batch size for prompt processing")
-                .default_value("512"),
-        )
-        .arg(
-            Arg::new("temp")
-                .long("temp")
-                .value_parser(clap::value_parser!(f64))
-                .value_name("TEMP")
-                .help("Temperature for sampling")
-                .default_value("1.0"),
-        )
-        .arg(
-            Arg::new("top_p")
-                .long("top-p")
-                .value_parser(clap::value_parser!(f64))
-                .value_name("TOP_P")
-                .help("An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. 1.0 = disabled")
-                .default_value("1.0"),
-        )
-        .arg(
-            Arg::new("repeat_penalty")
-                .long("repeat-penalty")
-                .value_parser(clap::value_parser!(f64))
-                .value_name("REPEAT_PENALTY")
-                .help("Penalize repeat sequence of tokens")
-                .default_value("1.1"),
-        )
-        .arg(
-            Arg::new("presence_penalty")
-                .long("presence-penalty")
-                .value_parser(clap::value_parser!(f64))
-                .value_name("PRESENCE_PENALTY")
-                .help("Repeat alpha presence penalty. 0.0 = disabled")
-                .default_value("0.0"),
-        )
-        .arg(
-            Arg::new("frequency_penalty")
-                .long("frequency-penalty")
-                .value_parser(clap::value_parser!(f64))
-                .value_name("FREQUENCY_PENALTY")
-                .help("Repeat alpha frequency penalty. 0.0 = disabled")
-                .default_value("0.0"),
+                .help("Sets context sizes for chat and embedding models. The sizes are separated by comma without space, for example, '4096,384'. The first value is for the chat model, and the second value is for the embedding model.")
+                .default_value("4096,384"),
         )
         .arg(
             Arg::new("reverse_prompt")
@@ -171,24 +103,84 @@ async fn main() -> Result<(), ServerError> {
                 .help("Sets the prompt template.")
                 .required(true)
         )
-        .arg(
-            Arg::new("llava_mmproj")
-                .long("llava-mmproj")
-                .value_name("LLAVA_MMPROJ")
-                .help("Path to the multimodal projector file")
-                .default_value(""),
-        )
+        // .arg(
+        //     Arg::new("n_predict")
+        //         .short('n')
+        //         .long("n-predict")
+        //         .value_parser(clap::value_parser!(u64))
+        //         .value_name("N_PRDICT")
+        //         .help("Number of tokens to predict")
+        //         .default_value("1024"),
+        // )
+        // .arg(
+        //     Arg::new("n_gpu_layers")
+        //         .short('g')
+        //         .long("n-gpu-layers")
+        //         .value_parser(clap::value_parser!(u64))
+        //         .value_name("N_GPU_LAYERS")
+        //         .help("Number of layers to run on the GPU")
+        //         .default_value("100"),
+        // )
+        // .arg(
+        //     Arg::new("batch_size")
+        //         .short('b')
+        //         .long("batch-size")
+        //         .value_parser(clap::value_parser!(u64))
+        //         .value_name("BATCH_SIZE")
+        //         .help("Batch size for prompt processing")
+        //         .default_value("512"),
+        // )
+        // .arg(
+        //     Arg::new("temp")
+        //         .long("temp")
+        //         .value_parser(clap::value_parser!(f64))
+        //         .value_name("TEMP")
+        //         .help("Temperature for sampling")
+        //         .default_value("1.0"),
+        // )
+        // .arg(
+        //     Arg::new("top_p")
+        //         .long("top-p")
+        //         .value_parser(clap::value_parser!(f64))
+        //         .value_name("TOP_P")
+        //         .help("An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. 1.0 = disabled")
+        //         .default_value("1.0"),
+        // )
+        // .arg(
+        //     Arg::new("repeat_penalty")
+        //         .long("repeat-penalty")
+        //         .value_parser(clap::value_parser!(f64))
+        //         .value_name("REPEAT_PENALTY")
+        //         .help("Penalize repeat sequence of tokens")
+        //         .default_value("1.1"),
+        // )
+        // .arg(
+        //     Arg::new("presence_penalty")
+        //         .long("presence-penalty")
+        //         .value_parser(clap::value_parser!(f64))
+        //         .value_name("PRESENCE_PENALTY")
+        //         .help("Repeat alpha presence penalty. 0.0 = disabled")
+        //         .default_value("0.0"),
+        // )
+        // .arg(
+        //     Arg::new("frequency_penalty")
+        //         .long("frequency-penalty")
+        //         .value_parser(clap::value_parser!(f64))
+        //         .value_name("FREQUENCY_PENALTY")
+        //         .help("Repeat alpha frequency penalty. 0.0 = disabled")
+        //         .default_value("0.0"),
+        // )
         .arg(
             Arg::new("qdrant_url")
                 .long("qdrant-url")
-                .help("Sets the url of Qdrant REST Service (e.g., http://localhost:6333). Required for RAG.")
-                .default_value(""),
+                .help("Sets the url of Qdrant REST Service.")
+                .default_value("http://localhost:6333"),
         )
         .arg(
             Arg::new("qdrant_collection_name")
                 .long("qdrant-collection-name")
-                .help("Sets the collection name of Qdrant. Required for RAG.")
-                .default_value(""),
+                .help("Sets the collection name of Qdrant.")
+                .default_value("default"),
         )
         .arg(
             Arg::new("qdrant_limit")
@@ -202,7 +194,7 @@ async fn main() -> Result<(), ServerError> {
                 .long("qdrant-score-threshold")
                 .value_parser(clap::value_parser!(f32))
                 .help("Minimal score threshold for the search result")
-                .default_value("0.0"),
+                .default_value("0.4"),
         )
         .arg(
             Arg::new("log_prompts")
@@ -234,8 +226,10 @@ async fn main() -> Result<(), ServerError> {
         )
         .get_matches();
 
+    println!("\n[+] Configuring LlamaEdge RAG API server ...");
+
     // print the version of the server
-    println!("[INFO] LlamaEdge version: {}", env!("CARGO_PKG_VERSION"),);
+    println!("    * LlamaEdge version: {}", env!("CARGO_PKG_VERSION"),);
 
     // socket address
     let socket_addr =
@@ -248,7 +242,7 @@ async fn main() -> Result<(), ServerError> {
         .parse::<SocketAddr>()
         .map_err(|e| ServerError::SocketAddr(e.to_string()))?;
     println!(
-        "[INFO] Socket address: {socket_addr}",
+        "    * Socket address: {socket_addr}",
         socket_addr = socket_addr
     );
 
@@ -260,12 +254,12 @@ async fn main() -> Result<(), ServerError> {
         ))?
         .map(|s| s.to_string())
         .collect();
-    if model_names.len() > 2 {
+    if model_names.len() != 2 {
         return Err(ServerError::ArgumentError(
-            "LlamaEdge API Server supports two models at most. You specified more than two model names.".to_owned(),
+            "RAG API Server requires a chat model and an embedding model.".to_owned(),
         ));
     }
-    println!("[INFO] Model names: {names}", names = model_names.join(","));
+    println!("    * Model names: {names}", names = model_names.join(","));
 
     // model aliases
     let model_aliases: Vec<String> = matches
@@ -275,13 +269,13 @@ async fn main() -> Result<(), ServerError> {
         ))?
         .map(|s| s.to_string())
         .collect();
-    if model_aliases.len() > 2 {
+    if model_aliases.len() != 2 {
         return Err(ServerError::ArgumentError(
-            "LlamaEdge API Server supports two models at most. You specified more than two model aliaes.".to_owned(),
+            "RAG API Server requires two model aliases: one for chat model, one for embedding model.".to_owned(),
         ));
     }
     println!(
-        "[INFO] Model aliases: {aliases}",
+        "    * Model aliases: {aliases}",
         aliases = model_aliases.join(",")
     );
 
@@ -296,14 +290,9 @@ async fn main() -> Result<(), ServerError> {
         ))?
         .map(|n| n.to_owned())
         .collect::<Vec<u64>>();
-    if ctx_sizes.len() > 2 {
+    if ctx_sizes.len() != 2 {
         return Err(ServerError::ArgumentError(
-            "LlamaEdge API Server supports two models at most. You specified more than two context sizes.".to_owned(),
-        ));
-    }
-    if model_names.len() != ctx_sizes.len() {
-        return Err(ServerError::ArgumentError(
-            format!("You specified {} model names, but {} context sizes. They should be set the same number of arguments", model_names.len(), ctx_sizes.len())
+            "RAG API Server requires two context sizes: one for chat model, one for embedding model.".to_owned(),
         ));
     }
     let ctx_sizes_str: String = ctx_sizes
@@ -311,105 +300,7 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    println!("[INFO] context sizes: {ctx_sizes_str}");
-
-    // number of tokens to predict
-    let n_predict = matches
-        .get_one::<u64>("n_predict")
-        .ok_or(ServerError::ArgumentError(
-            "Failed to parse the value of `n_predict` CLI option".to_owned(),
-        ))?;
-    println!("[INFO] Number of tokens to predict: {n}", n = n_predict);
-    options.n_predict = *n_predict;
-
-    // n_gpu_layers
-    let n_gpu_layers = matches
-        .get_one::<u64>("n_gpu_layers")
-        .ok_or(ServerError::ArgumentError(
-            "Failed to parse the value of `n_gpu_layers` CLI option".to_owned(),
-        ))?;
-    println!(
-        "[INFO] Number of layers to run on the GPU: {n}",
-        n = n_gpu_layers
-    );
-    options.n_gpu_layers = *n_gpu_layers;
-
-    // batch size
-    let batch_size = matches
-        .get_one::<u64>("batch_size")
-        .ok_or(ServerError::ArgumentError(
-            "Failed to parse the value of `batch_size` CLI option".to_owned(),
-        ))?;
-    println!(
-        "[INFO] Batch size for prompt processing: {size}",
-        size = batch_size
-    );
-    options.batch_size = *batch_size;
-
-    // temperature
-    let temp = matches
-        .get_one::<f64>("temp")
-        .ok_or(ServerError::ArgumentError(
-            "Failed to parse the value of `temp` CLI option".to_owned(),
-        ))?;
-    println!("[INFO] Temperature for sampling: {temp}", temp = temp);
-    options.temperature = *temp;
-
-    // top-p
-    let top_p = matches
-        .get_one::<f64>("top_p")
-        .ok_or(error::ServerError::ArgumentError(
-            "Failed to parse the value of `top_p` CLI option".to_owned(),
-        ))?;
-    println!(
-        "[INFO] Top-p sampling (1.0 = disabled): {top_p}",
-        top_p = top_p
-    );
-
-    // repeat penalty
-    let repeat_penalty =
-        matches
-            .get_one::<f64>("repeat_penalty")
-            .ok_or(ServerError::ArgumentError(
-                "Failed to parse the value of `repeat_penalty` CLI option".to_owned(),
-            ))?;
-    println!(
-        "[INFO] Penalize repeat sequence of tokens: {penalty}",
-        penalty = repeat_penalty
-    );
-    options.repeat_penalty = *repeat_penalty;
-
-    // presence penalty
-    let presence_penalty =
-        matches
-            .get_one::<f64>("presence_penalty")
-            .ok_or(error::ServerError::ArgumentError(
-                "Failed to parse the value of `presence_penalty` CLI option".to_owned(),
-            ))?;
-    println!(
-        "[INFO] Presence penalty (0.0 = disabled): {penalty}",
-        penalty = presence_penalty
-    );
-    options.presence_penalty = *presence_penalty;
-
-    // frequency penalty
-    let frequency_penalty =
-        matches
-            .get_one::<f64>("frequency_penalty")
-            .ok_or(error::ServerError::ArgumentError(
-                "Failed to parse the value of `frequency_penalty` CLI option".to_owned(),
-            ))?;
-    println!(
-        "[INFO] Frequency penalty (0.0 = disabled): {penalty}",
-        penalty = frequency_penalty
-    );
-    options.frequency_penalty = *frequency_penalty;
-
-    // reverse_prompt
-    if let Some(reverse_prompt) = matches.get_one::<String>("reverse_prompt") {
-        println!("[INFO] Reverse prompt: {prompt}", prompt = &reverse_prompt);
-        options.reverse_prompt = Some(reverse_prompt.to_string());
-    }
+    println!("    * context sizes: {ctx_sizes_str}");
 
     // type of prompt template
     let prompt_template =
@@ -420,34 +311,25 @@ async fn main() -> Result<(), ServerError> {
             ))?;
     let template_ty = PromptTemplateType::from_str(prompt_template)
         .map_err(|e| ServerError::InvalidPromptTemplateType(e.to_string()))?;
-    println!("[INFO] Prompt template: {ty:?}", ty = &template_ty);
+    println!("    * Prompt template: {ty:?}", ty = &template_ty);
     let ref_template_ty = std::sync::Arc::new(template_ty);
 
-    // multimodal projector file
-    let llava_mmproj =
-        matches
-            .get_one::<String>("llava_mmproj")
-            .ok_or(ServerError::ArgumentError(
-                "Failed to parse the value of `llava_mmproj` CLI option".to_owned(),
-            ))?;
-    if !llava_mmproj.is_empty() {
-        println!("[INFO] Multimodal projector: {path}", path = llava_mmproj);
-        options.mmproj = Some(llava_mmproj.to_owned());
+    // reverse_prompt
+    if let Some(reverse_prompt) = matches.get_one::<String>("reverse_prompt") {
+        println!("    * Reverse prompt: {prompt}", prompt = &reverse_prompt);
+        options.reverse_prompt = Some(reverse_prompt.to_string());
     }
 
-    // log prompts
-    let log_prompts = matches.get_flag("log_prompts");
-    println!("[INFO] Log prompts: {enable}", enable = log_prompts);
-    options.log_prompts = log_prompts;
-    let ref_log_prompts = std::sync::Arc::new(log_prompts);
+    // qdrant config
+    {
+        // qdrant url
+        let qdrant_url =
+            matches
+                .get_one::<String>("qdrant_url")
+                .ok_or(ServerError::ArgumentError(
+                    "Failed to parse the value of `qdrant_url` CLI option".to_owned(),
+                ))?;
 
-    // qdrant url
-    let qdrant_url = matches
-        .get_one::<String>("qdrant_url")
-        .ok_or(ServerError::ArgumentError(
-            "Failed to parse the value of `qdrant_url` CLI option".to_owned(),
-        ))?;
-    if !qdrant_url.is_empty() {
         if !is_valid_url(qdrant_url) {
             return Err(ServerError::ArgumentError(format!(
                 "The URL of Qdrant REST API is invalid: {}.",
@@ -456,7 +338,7 @@ async fn main() -> Result<(), ServerError> {
         }
 
         println!(
-            "[INFO] Qdrant server address: {socket_addr}",
+            "    * Qdrant server address: {socket_addr}",
             socket_addr = qdrant_url
         );
 
@@ -467,7 +349,7 @@ async fn main() -> Result<(), ServerError> {
             ),
         )?;
         println!(
-            "[INFO] Qdrant collection name: {name}",
+            "    * Qdrant collection name: {name}",
             name = &qdrant_collection_name
         );
 
@@ -479,7 +361,7 @@ async fn main() -> Result<(), ServerError> {
                     "Failed to parse the value of `qdrant_limit` CLI option".to_owned(),
                 ))?;
         println!(
-            "[INFO] Max number of retrieved result: {limit}",
+            "    * Max number of retrieved result: {limit}",
             limit = qdrant_limit
         );
 
@@ -491,7 +373,7 @@ async fn main() -> Result<(), ServerError> {
                     "Failed to parse the value of `qdrant_score_threshold` CLI option".to_owned(),
                 ))?;
         println!(
-            "[INFO] Qdrant score threshold: {threshold}",
+            "    * Qdrant score threshold: {threshold}",
             threshold = qdrant_score_threshold
         );
 
@@ -507,20 +389,26 @@ async fn main() -> Result<(), ServerError> {
             .map_err(|_| ServerError::Operation("Failed to set '`QDRANT_CONFIG`.".to_string()))?;
     }
 
+    // log prompts
+    let log_prompts = matches.get_flag("log_prompts");
+    println!("    * Log prompts: {enable}", enable = log_prompts);
+    options.log_prompts = log_prompts;
+    let ref_log_prompts = std::sync::Arc::new(log_prompts);
+
     // log statistics
     let log_stat = matches.get_flag("log_stat");
-    println!("[INFO] Log statistics: {enable}", enable = log_stat);
+    println!("    * Log statistics: {enable}", enable = log_stat);
 
     // log all
     let log_all = matches.get_flag("log_all");
-    println!("[INFO] Log all information: {enable}", enable = log_all);
+    println!("    * Log all information: {enable}", enable = log_all);
 
     // set `log_enable`
     if log_stat || log_all {
         options.log_enable = true;
     }
 
-    println!("[INFO] Starting server ...");
+    println!("\n[+] Starting LlamaEdge RAG API server ...");
 
     if log_stat || log_all {
         print_log_begin_separator(
@@ -532,93 +420,54 @@ async fn main() -> Result<(), ServerError> {
 
     // * initialize the core context
     {
-        match model_names.len() {
-            1 => {
-                // specify chat model
-                let model_alias = model_aliases
-                    .first()
-                    .expect("Failed to get the model alias")
-                    .trim();
-                let model_name = model_names
-                    .first()
-                    .expect("Failed to get the model name")
-                    .trim();
-                let ctx_size = ctx_sizes.first().expect("Failed to get the context size");
-                let mut metadata = options.clone();
-                metadata.ctx_size = *ctx_size;
+        // specify chat model
+        let model_alias = model_aliases
+            .first()
+            .expect("Failed to get the model alias")
+            .trim();
+        let model_name = model_names
+            .first()
+            .expect("Failed to get the model name")
+            .trim();
+        let ctx_size = ctx_sizes.first().expect("Failed to get the context size");
+        let mut metadata = options.clone();
+        metadata.ctx_size = *ctx_size;
 
-                let chat_models = vec![ModelInfo {
-                    model_name: model_name.to_string(),
-                    model_alias: model_alias.to_string(),
-                    metadata,
-                }];
+        let chat_models = vec![ModelInfo {
+            model_name: model_name.to_string(),
+            model_alias: model_alias.to_string(),
+            metadata,
+        }];
 
-                // initialize the core context
-                llama_core::init_core_context(&chat_models, None).map_err(|e| {
-                    ServerError::Operation(format!("Failed to initialize the core context. {}", e))
-                })?;
-            }
-            2 => {
-                // specify chat model
-                let model_alias = model_aliases
-                    .first()
-                    .expect("Failed to get the model alias")
-                    .trim();
-                let model_name = model_names
-                    .first()
-                    .expect("Failed to get the model name")
-                    .trim();
-                let ctx_size = ctx_sizes.first().expect("Failed to get the context size");
-                let mut metadata = options.clone();
-                metadata.ctx_size = *ctx_size;
+        // specify embedding model
+        let model_alias = model_aliases
+            .get(1)
+            .expect("Failed to get the model alias")
+            .trim();
+        let model_name = model_names
+            .get(1)
+            .expect("Failed to get the model name")
+            .trim();
+        let ctx_size = ctx_sizes.get(1).expect("Failed to get the context size");
+        let mut metadata = options.clone();
+        metadata.ctx_size = *ctx_size;
 
-                let chat_models = vec![ModelInfo {
-                    model_name: model_name.to_string(),
-                    model_alias: model_alias.to_string(),
-                    metadata,
-                }];
+        let embedding_models = vec![ModelInfo {
+            model_name: model_name.to_string(),
+            model_alias: model_alias.to_string(),
+            metadata,
+        }];
 
-                // specify embedding model
-                let model_alias = model_aliases
-                    .get(1)
-                    .expect("Failed to get the model alias")
-                    .trim();
-                let model_name = model_names
-                    .get(1)
-                    .expect("Failed to get the model name")
-                    .trim();
-                let ctx_size = ctx_sizes.get(1).expect("Failed to get the context size");
-                let mut metadata = options.clone();
-                metadata.ctx_size = *ctx_size;
+        // initialize the core context
+        llama_core::init_core_context(&chat_models, Some(&embedding_models)).map_err(|e| {
+            ServerError::Operation(format!("Failed to initialize the core context. {}", e))
+        })?;
 
-                let embedding_models = vec![ModelInfo {
-                    model_name: model_name.to_string(),
-                    model_alias: model_alias.to_string(),
-                    metadata,
-                }];
-
-                // initialize the core context
-                llama_core::init_core_context(&chat_models, Some(&embedding_models)).map_err(
-                    |e| {
-                        ServerError::Operation(format!(
-                            "Failed to initialize the core context. {}",
-                            e
-                        ))
-                    },
-                )?;
-            }
-            _ => {
-                return Err(ServerError::Operation(
-                    "One or two model names should be specified.".to_owned(),
-                ))
-            }
-        }
-
-        // get the plugin version info
+        // print plugin version info
         let plugin_info =
             llama_core::get_plugin_info().map_err(|e| ServerError::Operation(e.to_string()))?;
         println!(
-            "[INFO] Plugin version: b{build_number} (commit {commit_id})",
+            "    * wasi_nn-ggml plugin version: b{build_number} (commit {commit_id})",
             build_number = plugin_info.build_number,
             commit_id = plugin_info.commit_id,
         );
@@ -649,7 +498,7 @@ async fn main() -> Result<(), ServerError> {
 
     let server = Server::bind(&addr).serve(new_service);
 
-    println!("[INFO] Listening on http://{}", addr);
+    println!("\n[+] Listening on http://{}", addr);
 
     match server.await {
         Ok(_) => Ok(()),
