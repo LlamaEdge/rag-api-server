@@ -162,7 +162,10 @@ async fn main() -> Result<(), ServerError> {
     println!("\n[+] Configuring LlamaEdge RAG API server ...");
 
     // print the version of the server
-    println!("    * LlamaEdge version: {}", env!("CARGO_PKG_VERSION"),);
+    println!(
+        "    * LlamaEdge RAG API server version: {}",
+        env!("CARGO_PKG_VERSION"),
+    );
 
     // socket address
     let socket_addr =
@@ -189,7 +192,7 @@ async fn main() -> Result<(), ServerError> {
         .collect();
     if model_names.len() != 2 {
         return Err(ServerError::ArgumentError(
-            "RAG API Server requires a chat model and an embedding model.".to_owned(),
+            "LlamaEdge RAG API server requires a chat model and an embedding model.".to_owned(),
         ));
     }
     println!("    * Model names: {names}", names = model_names.join(","));
@@ -204,7 +207,7 @@ async fn main() -> Result<(), ServerError> {
         .collect();
     if model_aliases.len() != 2 {
         return Err(ServerError::ArgumentError(
-            "RAG API Server requires two model aliases: one for chat model, one for embedding model.".to_owned(),
+            "LlamaEdge RAG API server requires two model aliases: one for chat model, one for embedding model.".to_owned(),
         ));
     }
     println!(
@@ -225,7 +228,7 @@ async fn main() -> Result<(), ServerError> {
         .collect::<Vec<u64>>();
     if ctx_sizes.len() != 2 {
         return Err(ServerError::ArgumentError(
-            "RAG API Server requires two context sizes: one for chat model, one for embedding model.".to_owned(),
+            "LlamaEdge RAG API server requires two context sizes: one for chat model, one for embedding model.".to_owned(),
         ));
     }
     let ctx_sizes_str: String = ctx_sizes
