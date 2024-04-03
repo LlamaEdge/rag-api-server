@@ -6,7 +6,6 @@ use crate::{
 use chat_prompts::{MergeRagContext, PromptTemplateType};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
-    completions::CompletionRequest,
     embeddings::EmbeddingRequest,
     files::FileObject,
     rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest},
@@ -84,49 +83,6 @@ pub(crate) async fn embeddings_handler(
                     "Fail to serialize embedding object. {}",
                     e
                 )),
-            }
-        }
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
-}
-
-pub(crate) async fn completions_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
-    // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
-    let completion_request: CompletionRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(completion_request) => completion_request,
-        Err(e) => {
-            return error::bad_request(format!(
-                "Failed to deserialize completion request. {msg}",
-                msg = e
-            ));
-        }
-    };
-
-    match llama_core::completions::completions(&completion_request).await {
-        Ok(completion_object) => {
-            // serialize completion object
-            let s = match serde_json::to_string(&completion_object) {
-                Ok(s) => s,
-                Err(e) => {
-                    return error::internal_server_error(format!(
-                        "Failed to serialize completion object. {msg}",
-                        msg = e
-                    ));
-                }
-            };
-
-            // return response
-            let result = Response::builder()
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .body(Body::from(s));
-            match result {
-                Ok(response) => Ok(response),
-                Err(e) => error::internal_server_error(e.to_string()),
             }
         }
         Err(e) => error::internal_server_error(e.to_string()),
