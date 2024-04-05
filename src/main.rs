@@ -18,9 +18,12 @@ use utils::{is_valid_url, print_log_begin_separator, print_log_end_separator};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
+// default socket address
 const DEFAULT_SOCKET_ADDRESS: &str = "0.0.0.0:8080";
-
+// Qdrant config
 pub(crate) static QDRANT_CONFIG: OnceCell<QdrantConfig> = OnceCell::new();
+// global system prompt
+pub(crate) static GLOBAL_SYSTEM_PROMPT: OnceCell<String> = OnceCell::new();
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -102,6 +105,12 @@ async fn main() -> Result<(), ServerError> {
                 .value_name("TEMPLATE")
                 .help("Sets the prompt template.")
                 .required(true)
+        )
+        .arg(
+            Arg::new("system_prompt")
+                .long("system-prompt")
+                .help("Sets global system prompt.")
+                .default_value(""),
         )
         .arg(
             Arg::new("qdrant_url")
@@ -255,6 +264,18 @@ async fn main() -> Result<(), ServerError> {
         println!("    * Reverse prompt: {prompt}", prompt = &reverse_prompt);
         options.reverse_prompt = Some(reverse_prompt.to_string());
     }
+
+    // global system prompt
+    let global_system_prompt =
+        matches
+            .get_one::<String>("system_prompt")
+            .ok_or(ServerError::ArgumentError(
+                "Failed to parse the value of `system_prompt` CLI option".to_owned(),
+            ))?;
+    println!("    * Global system prompt: {}", global_system_prompt);
+    GLOBAL_SYSTEM_PROMPT
+        .set(global_system_prompt.to_owned())
+        .map_err(|_| ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string()))?;
 
     // qdrant config
     {

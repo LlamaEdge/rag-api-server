@@ -1,9 +1,9 @@
 use crate::{
     error,
     utils::{print_log_begin_separator, print_log_end_separator},
-    QDRANT_CONFIG,
+    GLOBAL_SYSTEM_PROMPT, QDRANT_CONFIG,
 };
-use chat_prompts::{MergeRagContext, PromptTemplateType};
+use chat_prompts::{error as ChatPromptsError, MergeRagContext, PromptTemplateType};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::EmbeddingRequest,
@@ -463,6 +463,38 @@ pub(crate) async fn rag_query_handler(
             }
         }
 
+        if chat_request.messages.is_empty() {
+            return error::internal_server_error("The global system prompt is not set.");
+        }
+        // get the global system prompt
+        let global_system_prompt = match GLOBAL_SYSTEM_PROMPT.get() {
+            Some(global_system_prompt) => global_system_prompt,
+            None => {
+                return error::internal_server_error("The global system prompt is not set.");
+            }
+        };
+        // replace the original system message in chat request with the global system prompt
+        match chat_request.messages[0] {
+            ChatCompletionRequestMessage::System(_) => {
+                // create system message
+                let system_message = ChatCompletionRequestMessage::new_system_message(
+                    global_system_prompt.to_owned(),
+                    chat_request.messages[0].name().cloned(),
+                );
+                // replace the original system message
+                chat_request.messages[0] = system_message;
+            }
+            _ => {
+                // create system message
+                let system_message = ChatCompletionRequestMessage::new_system_message(
+                    global_system_prompt.to_owned(),
+                    chat_request.messages[0].name().cloned(),
+                );
+                // insert system message
+                chat_request.messages.insert(0, system_message);
+            }
+        };
+
         // insert rag context into chat request
         if let Err(e) = RagPromptBuilder::build(&mut chat_request.messages, &[context]) {
             return error::internal_server_error(e.to_string());
@@ -492,7 +524,41 @@ pub(crate) async fn rag_query_handler(
 
 #[derive(Debug, Default)]
 struct RagPromptBuilder;
-impl MergeRagContext for RagPromptBuilder {}
+impl MergeRagContext for RagPromptBuilder {
+    fn build(
+        messages: &mut Vec<endpoints::chat::ChatCompletionRequestMessage>,
+        context: &[String],
+    ) -> ChatPromptsError::Result<()> {
+        if messages.is_empty() {
+            return Err(ChatPromptsError::PromptError::NoMessages);
+        }
+
+        if context.is_empty() {
+            return Err(ChatPromptsError::PromptError::Operation(
+                "No context provided.".to_string(),
+            ));
+        }
+
+        let context = context[0].trim_end();
+
+        // fill in the context for the system message
+        if let ChatCompletionRequestMessage::System(message) = &messages[0] {
+            // compose new system message content
+            let content = format!(
+                "{system_message}\n{context}",
+                system_message = message.content().trim(),
+                context = context.trim_end()
+            );
+            // create system message
+            let system_message =
+                ChatCompletionRequestMessage::new_system_message(content, message.name().cloned());
+            // replace the original system message
+            messages[0] = system_message;
+        }
+
+        Ok(())
+    }
+}
 
 pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     if req.method() == Method::POST {
