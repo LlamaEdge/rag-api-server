@@ -716,3 +716,238 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
         Err(e) => error::internal_server_error(e.to_string()),
     }
 }
+
+pub(crate) async fn doc_to_embeddings(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    // upload the target rag document
+    let file_object = if req.method() == Method::POST {
+        let boundary = "boundary=";
+
+        let boundary = req.headers().get("content-type").and_then(|ct| {
+            let ct = ct.to_str().ok()?;
+            let idx = ct.find(boundary)?;
+            Some(ct[idx + boundary.len()..].to_string())
+        });
+
+        let req_body = req.into_body();
+        let body_bytes = to_bytes(req_body).await?;
+        let cursor = Cursor::new(body_bytes.to_vec());
+
+        let mut multipart = Multipart::with_body(cursor, boundary.unwrap());
+
+        let mut file_object: Option<FileObject> = None;
+        while let ReadEntryResult::Entry(mut field) = multipart.read_entry_mut() {
+            if &*field.headers.name == "file" {
+                let filename = match field.headers.filename {
+                    Some(filename) => filename,
+                    None => {
+                        return error::internal_server_error(
+                            "Failed to upload the target file. The filename is not provided.",
+                        );
+                    }
+                };
+
+                if !((filename).to_lowercase().ends_with(".txt")
+                    || (filename).to_lowercase().ends_with(".md"))
+                {
+                    return error::internal_server_error(
+                        "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported.",
+                    );
+                }
+
+                let mut buffer = Vec::new();
+                let size_in_bytes = match field.data.read_to_end(&mut buffer) {
+                    Ok(size_in_bytes) => size_in_bytes,
+                    Err(e) => {
+                        return error::internal_server_error(format!(
+                            "Failed to read the target file. {}",
+                            e
+                        ));
+                    }
+                };
+
+                // create a unique file id
+                let id = format!("file_{}", uuid::Uuid::new_v4());
+
+                // save the file
+                let path = Path::new("archives");
+                if !path.exists() {
+                    fs::create_dir(path).unwrap();
+                }
+                let file_path = path.join(&id);
+                if !file_path.exists() {
+                    fs::create_dir(&file_path).unwrap();
+                }
+                let mut file = match File::create(file_path.join(&filename)) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        return error::internal_server_error(format!(
+                            "Failed to create archive document {}. {}",
+                            &filename, e
+                        ));
+                    }
+                };
+                file.write_all(&buffer[..]).unwrap();
+
+                let created_at = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                    Ok(n) => n.as_secs(),
+                    Err(_) => {
+                        return error::internal_server_error("Failed to get the current time.")
+                    }
+                };
+
+                // create a file object
+                file_object = Some(FileObject {
+                    id,
+                    bytes: size_in_bytes as u64,
+                    created_at,
+                    filename,
+                    object: "file".to_string(),
+                    purpose: "assistants".to_string(),
+                });
+
+                break;
+            }
+        }
+
+        match file_object {
+            Some(fo) => fo,
+            None => {
+                return error::internal_server_error(
+                    "Failed to upload the target file. Not found the target file.",
+                )
+            }
+        }
+    } else if req.method() == Method::GET {
+        return error::internal_server_error("Not implemented for listing files.");
+    } else {
+        return error::internal_server_error("Invalid HTTP Method.");
+    };
+
+    // chunk the text
+    let chunks = {
+        // check if the archives directory exists
+        let path = Path::new("archives");
+        if !path.exists() {
+            return error::internal_server_error("The `archives` directory does not exist.");
+        }
+
+        // check if the archive id exists
+        let archive_path = path.join(&file_object.id);
+        if !archive_path.exists() {
+            let message = format!("Not found archive id: {}", &file_object.id);
+            return error::internal_server_error(message);
+        }
+
+        // check if the file exists
+        let file_path = archive_path.join(&file_object.filename);
+        if !file_path.exists() {
+            let message = format!(
+                "Not found file: {} in archive id: {}",
+                &file_object.filename, &file_object.id
+            );
+            return error::internal_server_error(message);
+        }
+
+        // get the extension of the archived file
+        let extension = match file_path.extension().and_then(std::ffi::OsStr::to_str) {
+            Some(extension) => extension,
+            None => {
+                return error::internal_server_error(format!(
+                    "Failed to get the extension of the archived `{}`.",
+                    &file_object.filename
+                ));
+            }
+        };
+
+        // open the file
+        let mut file = match File::open(&file_path) {
+            Ok(file) => file,
+            Err(e) => {
+                return error::internal_server_error(format!(
+                    "Failed to open `{}`. {}",
+                    &file_object.filename, e
+                ));
+            }
+        };
+
+        // read the file
+        let mut contents = String::new();
+        if let Err(e) = file.read_to_string(&mut contents) {
+            return error::internal_server_error(format!(
+                "Failed to read `{}`. {}",
+                &file_object.filename, e
+            ));
+        }
+
+        let chunks = match llama_core::rag::chunk_text(&contents, extension) {
+            Ok(chunks) => chunks,
+            Err(e) => return error::internal_server_error(e.to_string()),
+        };
+
+        chunks
+    };
+
+    // compute embeddings for chunks
+    let embedding_response = {
+        print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
+
+        // get the name of embedding model
+        let model = match llama_core::utils::embedding_model_names() {
+            Ok(model_names) => model_names[0].clone(),
+            Err(e) => {
+                return error::internal_server_error(e.to_string());
+            }
+        };
+        // create an embedding request
+        let embedding_request = EmbeddingRequest {
+            model,
+            input: chunks,
+            encoding_format: None,
+            user: None,
+        };
+
+        let qdrant_config = match QDRANT_CONFIG.get() {
+            Some(qdrant_config) => qdrant_config,
+            None => {
+                return error::internal_server_error("The Qdrant config is not set.");
+            }
+        };
+
+        // create rag embedding request
+        let rag_embedding_request = RagEmbeddingRequest::from_embedding_request(
+            embedding_request,
+            qdrant_config.url.clone(),
+            qdrant_config.collection_name.clone(),
+        );
+
+        let embedding_response =
+            match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request, true).await
+            {
+                Ok(embedding_response) => embedding_response,
+                Err(e) => return error::internal_server_error(e.to_string()),
+            };
+
+        print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
+
+        embedding_response
+    };
+
+    // serialize embedding response
+    match serde_json::to_string(&embedding_response) {
+        Ok(s) => {
+            // return response
+            let result = Response::builder()
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Access-Control-Allow-Methods", "*")
+                .header("Access-Control-Allow-Headers", "*")
+                .body(Body::from(s));
+            match result {
+                Ok(response) => Ok(response),
+                Err(e) => error::internal_server_error(e.to_string()),
+            }
+        }
+        Err(e) => {
+            error::internal_server_error(format!("Fail to serialize embedding object. {}", e))
+        }
+    }
+}
