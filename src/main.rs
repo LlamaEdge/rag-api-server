@@ -35,20 +35,13 @@ async fn main() -> Result<(), ServerError> {
     let matches = Command::new("rag-api-server")
         .version(crate_version!())
         .arg(
-            Arg::new("socket_addr")
-                .short('s')
-                .long("socket-addr")
-                .value_name("IP:PORT")
-                .help("Sets the socket address")
-                .default_value(DEFAULT_SOCKET_ADDRESS),
-        )
-        .arg(
             Arg::new("model_name")
                 .short('m')
                 .long("model-name")
                 .value_name("MODEL-NAME")
                 .value_delimiter(',')
-                .help("Sets names for chat and embedding models. The names are separated by comma without space, for example, 'Llama-2-7b,all-minilm'.")
+                .help("Sets names for chat and embedding models. The names are separated by comma without space, for example, '--model-name Llama-2-7b,all-minilm'.")
+                .required(true),
         )
         .arg(
             Arg::new("model_alias")
@@ -66,7 +59,7 @@ async fn main() -> Result<(), ServerError> {
                 .value_name("CTX_SIZE")
                 .value_delimiter(',')
                 .value_parser(clap::value_parser!(u64))
-                .help("Sets context sizes for chat and embedding models. The sizes are separated by comma without space, for example, '4096,384'. The first value is for the chat model, and the second value is for the embedding model.")
+                .help("Sets context sizes for chat and embedding models. The sizes are separated by comma without space, for example, '--ctx-size 4096,384'. The first value is for the chat model, and the second value is for the embedding model.")
                 .default_value("4096,384"),
         )
         .arg(
@@ -165,6 +158,14 @@ async fn main() -> Result<(), ServerError> {
                 .value_name("WEB_UI")
                 .help("Root path for the Web UI files")
                 .default_value("chatbot-ui"),
+        )
+        .arg(
+            Arg::new("socket_addr")
+                .short('s')
+                .long("socket-addr")
+                .value_name("IP:PORT")
+                .help("Sets the socket address")
+                .default_value(DEFAULT_SOCKET_ADDRESS),
         )
         .get_matches();
 
