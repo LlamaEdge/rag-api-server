@@ -945,12 +945,10 @@ pub(crate) async fn doc_to_embeddings(req: Request<Body>) -> Result<Response<Bod
             ));
         }
 
-        let chunks = match llama_core::rag::chunk_text(&contents, extension) {
+        match llama_core::rag::chunk_text(&contents, extension) {
             Ok(chunks) => chunks,
             Err(e) => return error::internal_server_error(e.to_string()),
-        };
-
-        chunks
+        }
     };
 
     // compute embeddings for chunks
