@@ -38,7 +38,7 @@ jobs:
         run: |
           cargo clean
           cargo build --target wasm32-wasi --release --features full
-          cp target/wasm32-wasi/release/rag-api-server.wasm llama-api-server-full.wasm
+          cp target/wasm32-wasi/release/rag-api-server.wasm rag-api-server-full.wasm
 
       - name: Calculate checksum
         id: checksum
