@@ -1,0 +1,65 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - release-*
+      - feat-*
+      - ci-*
+      - refactor-*
+      - fix-*
+      - test-*
+    paths:
+      - '.github/workflows/**'
+      - '**/Cargo.toml'
+      - '**/*.rs'
+      - '**/*.sh'
+  pull_request:
+    branches:
+      - dev
+      - main
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/**'
+      - '**/Cargo.toml'
+      - '**/*.rs'
+      - '**/*.sh'
+
+jobs:
+  build-wasm:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-20.04, macos-12, macos-13]
+    steps:
+      - name: Clone project
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Install Rust-nightly
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: wasm32-wasi
+          components: rustfmt, clippy
+
+      - name: Install Rust-stable
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-wasi
+
+      - name: Build rag-api-server
+        id: build_rag_api_server
+        run: |
+          cargo +nightly fmt --all -- --check
+          cargo +nightly clippy --target wasm32-wasi -- -D warnings
+          cargo build --target wasm32-wasi --release
+
+      - name: Build rag-api-server-full
+        id: build_rag_api_server_full
+        run: |
+          cargo +nightly fmt --all -- --check
+          cargo +nightly clippy --target wasm32-wasi --features full -- -D warnings
+          cargo build --target wasm32-wasi --release --features full
