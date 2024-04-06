@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  workflow_dispatch: # manual trigger release
+    inputs:
+      create_release:
+        description: 'Create new release'
+        required: true
+        type: boolean
+      release_version:
+        description: "Version (e.g. 1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone project
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Setup rustup
+        id: rustup
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-wasi
+
+      - name: Build rag-api-server
+        id: build_rag_api_server
+        run: |
+          cargo clean
+          cargo build --target wasm32-wasi --release
+          cp target/wasm32-wasi/release/rag-api-server.wasm rag-api-server.wasm
+
+      - name: Build rag-api-server-full
+        id: build_rag_api_server_full
+        run: |
+          cargo clean
+          cargo build --target wasm32-wasi --release --features full
+          cp target/wasm32-wasi/release/rag-api-server.wasm llama-api-server-full.wasm
+
+      - name: Calculate checksum
+        id: checksum
+        run: |
+          sha256sum *.wasm > SHA256SUM
+
+          echo "Debug info(SHA256SUM):"
+          cat SHA256SUM
+
+      - name: Tag and release names
+        id: tag_and_release_names
+        run: |
+          echo "tag_name=${{ github.event.inputs.release_version }}" >> $GITHUB_OUTPUT
+          echo "release_name=LlamaEdge-RAG ${{ github.event.inputs.release_version }}" >> $GITHUB_OUTPUT
+
+      - name: Create Release and Upload Release Asset
+        if: ${{ github.event.inputs.create_release == 'true' && github.ref == 'refs/heads/main'}}
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.tag_and_release_names.outputs.release_name }}
+          tag_name: ${{ steps.tag_and_release_names.outputs.tag_name }}
+          body: TODO New Release.
+          draft: true
+          prerelease: true
+          files: |
+            rag-api-server.wasm
+            rag-api-server-full.wasm
+            SHA256SUM
