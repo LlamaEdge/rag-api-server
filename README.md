@@ -6,14 +6,17 @@
 
 - [LlamaEdge-RAG API Server](#llamaedge-rag-api-server)
   - [Introduction](#introduction)
-  - [Endpoints](#endpoints)
-    - [`/v1/models` endpoint](#v1models-endpoint)
-    - [`/v1/chat/completions` endpoint](#v1chatcompletions-endpoint)
-    - [`/v1/files` endpoint](#v1files-endpoint)
-    - [`/v1/chunks` endpoint](#v1chunks-endpoint)
-    - [`/v1/embeddings` endpoint](#v1embeddings-endpoint)
-    - [`/v1/create/rag` endpoint](#v1createrag-endpoint)
-  - [CLI options for the API server](#cli-options-for-the-api-server)
+    - [Endpoints](#endpoints)
+      - [`/v1/models` endpoint](#v1models-endpoint)
+      - [`/v1/chat/completions` endpoint](#v1chatcompletions-endpoint)
+      - [`/v1/files` endpoint](#v1files-endpoint)
+      - [`/v1/chunks` endpoint](#v1chunks-endpoint)
+      - [`/v1/embeddings` endpoint](#v1embeddings-endpoint)
+      - [`/v1/create/rag` endpoint](#v1createrag-endpoint)
+  - [Setup](#setup)
+    - [Prerequisites](#prerequisites)
+  - [Build](#build)
+  - [Execute](#execute)
 
 <!-- /code_chunk_output -->
 
@@ -21,9 +24,9 @@
 
 LlamaEdge-RAG API server provides a group of OpenAI-compatible web APIs for the Retrieval-Augmented Generation (RAG) applications. The server is implemented in WebAssembly (Wasm) and runs on [WasmEdge Runtime](https://github.com/WasmEdge/WasmEdge).
 
-## Endpoints
+### Endpoints
 
-### `/v1/models` endpoint
+#### `/v1/models` endpoint
 
 `rag-api-server` provides a POST API `/v1/models` to list currently available models.
 
@@ -53,7 +56,7 @@ If the command runs successfully, you should see the similar output as below in 
 
 </details>
 
-### `/v1/chat/completions` endpoint
+#### `/v1/chat/completions` endpoint
 
 Ask a question using OpenAI's JSON message format.
 
@@ -94,7 +97,7 @@ Here is the response.
 
 </details>
 
-### `/v1/files` endpoint
+#### `/v1/files` endpoint
 
 In RAG applications, uploading files is a necessary step.
 
@@ -123,7 +126,7 @@ The `id` and `filename` fields are important for the next step, for example, to 
 
 </details>
 
-### `/v1/chunks` endpoint
+#### `/v1/chunks` endpoint
 
 To segment the uploaded file to chunks for computing embeddings, use the `/v1/chunks` API.
 
@@ -153,7 +156,7 @@ The following is an example return with the generated chunks:
 
 </details>
 
-### `/v1/embeddings` endpoint
+#### `/v1/embeddings` endpoint
 
 To compute embeddings for user query or file chunks, use the `/v1/embeddings` API.
 
@@ -216,7 +219,7 @@ The embeddings returned are like below:
 
 </details>
 
-### `/v1/create/rag` endpoint
+#### `/v1/create/rag` endpoint
 
 `/v1/create/rag` endpoint provides users a one-click way to convert a text or markdown file to embeddings directly. The effect of the endpoint is equivalent to running `/v1/files` + `/v1/chunks` + `/v1/embeddings` sequently.
 
@@ -276,11 +279,72 @@ The embeddings returned are like below:
 
 </details>
 
-## CLI options for the API server
+## Setup
 
-The `-h` or `--help` option can list the available options of the `rag-api-server` wasm app:
+### Prerequisites
 
-  ```console
+Install the latest WasmEdge with plugins:
+
+<details> <summary> For macOS (apple silicon) </summary>
+
+```console
+# install WasmEdge-0.13.4 with wasi-nn-ggml plugin
+curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | bash -s -- --plugin wasi_nn-ggml
+
+# Assuming you use zsh (the default shell on macOS), run the following command to activate the environment
+source $HOME/.zshenv
+```
+
+</details>
+
+<details> <summary> For Ubuntu (>= 20.04) </summary>
+
+```console
+# install libopenblas-dev
+apt update && apt install -y libopenblas-dev
+
+# install WasmEdge-0.13.4 with wasi-nn-ggml plugin
+curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | bash -s -- --plugin wasi_nn-ggml
+
+# Assuming you use bash (the default shell on Ubuntu), run the following command to activate the environment
+source $HOME/.bashrc
+```
+
+</details>
+
+<details> <summary> For General Linux </summary>
+
+```console
+# install WasmEdge-0.13.4 with wasi-nn-ggml plugin
+curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | bash -s -- --plugin wasi_nn-ggml
+
+# Assuming you use bash (the default shell on Ubuntu), run the following command to activate the environment
+source $HOME/.bashrc
+```
+
+</details>
+
+## Build
+
+```bash
+# Clone the repository
+git clone https://github.com/LlamaEdge/rag-api-server.git
+
+# Change the working directory
+cd rag-api-server
+
+# Build `rag-api-server.wasm` with the `http` support only, or
+cargo build --target wasm32-wasi --release
+
+# Build `rag-api-server.wasm` with both `http` and `https` support
+cargo build --target wasm32-wasi --release --features full
+```
+
+<details> <summary> To check the CLI options, </summary>
+
+To check the CLI options of the `rag-api-server` wasm app, you can run the following command:
+
+  ```bash
   $ wasmedge rag-api-server.wasm -h
 
   Usage: rag-api-server.wasm [OPTIONS] --model-name <MODEL-NAME> --prompt-template <TEMPLATE>
@@ -322,10 +386,8 @@ The `-h` or `--help` option can list the available options of the `rag-api-serve
           Print version
   ```
 
-  Please guarantee that the port is not occupied by other processes. If the port specified is available on your machine and the command is successful, you should see the following output in the terminal:
+</details>
 
-  ```console
-  Listening on http://0.0.0.0:8080
-  ```
+## Execute
 
-  If the Web UI is ready, you can navigate to `http://127.0.0.1:8080` to open the chatbot, it will interact with the API of your server.
+(todo)
