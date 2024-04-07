@@ -21,8 +21,7 @@ pub(crate) async fn handle_llama_request(
         },
         "/v1/files" => ggml::files_handler(req).await,
         "/v1/chunks" => ggml::chunks_handler(req).await,
-        "/v1/rag/query" => ggml::rag_query_handler(req, template_ty, log_prompts).await,
-        "/v1/rag/embeddings" => ggml::doc_to_embeddings(req).await,
+        "/v1/create/rag" => ggml::doc_to_embeddings(req).await,
         _ => error::invalid_endpoint(req.uri().path()),
     }
 }
