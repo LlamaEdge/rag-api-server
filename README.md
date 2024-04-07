@@ -14,7 +14,6 @@
       - [`/v1/embeddings` endpoint](#v1embeddings-endpoint)
       - [`/v1/create/rag` endpoint](#v1createrag-endpoint)
   - [Setup](#setup)
-    - [Prerequisites](#prerequisites)
   - [Build](#build)
   - [Execute](#execute)
 
@@ -281,9 +280,7 @@ The embeddings returned are like below:
 
 ## Setup
 
-### Prerequisites
-
-Install the latest WasmEdge with plugins:
+Llama-RAG API server runs on WasmEdge Runtime. According to the operating system you are using, choose the installation command:
 
 <details> <summary> For macOS (apple silicon) </summary>
 
@@ -390,4 +387,19 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
 
 ## Execute
 
-(todo)
+LlamaEdge-RAG API server requires two types of models: chat and embedding. The chat model is used for generating responses to user queries, while the embedding model is used for computing embeddings for user queries or file chunks.
+
+For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](https://huggingface.co/second-state/Llama-2-7B-Chat-GGUF/resolve/main/Llama-2-7b-chat-hf-Q5_K_M.gguf) and [all-MiniLM-L6-v2-ggml-model-f16.gguf](https://huggingface.co/second-state/All-MiniLM-L6-v2-Embedding-GGUF/resolve/main/all-MiniLM-L6-v2-ggml-model-f16.gguf) models as examples.
+
+- Start an instance of LlamaEdge-RAG API server
+
+  ```bash
+  wasmedge --dir .:. --nn-preload default:GGML:AUTO:Llama-2-7b-chat-hf-Q5_K_M.gguf \
+      --nn-preload embedding:GGML:AUTO:all-MiniLM-L6-v2-ggml-model-f16.gguf \
+      rag-api-server.wasm \
+      --model-name Llama-2-7b-chat-hf-Q5_K_M,all-MiniLM-L6-v2-ggml-model-f16 \
+      --ctx-size 4096,384 \
+      --prompt-template llama-2-chat \
+      --system-prompt "Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n" \
+      --log-prompts --log-stat
+  ```
