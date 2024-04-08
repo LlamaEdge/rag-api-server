@@ -31,3 +31,7 @@ pub(crate) fn print_log_end_separator(ch: Option<&str>, len: Option<usize>) {
 pub(crate) fn is_valid_url(url: &str) -> bool {
     Url::parse(url).is_ok()
 }
+
+pub(crate) fn log(msg: impl std::fmt::Display) {
+    println!("{}", msg);
+}
