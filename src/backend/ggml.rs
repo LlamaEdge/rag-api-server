@@ -3,7 +3,7 @@ use crate::{
     utils::{print_log_begin_separator, print_log_end_separator},
     GLOBAL_SYSTEM_PROMPT, QDRANT_CONFIG,
 };
-use chat_prompts::{error as ChatPromptsError, MergeRagContext, PromptTemplateType};
+use chat_prompts::{error as ChatPromptsError, MergeRagContext};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::EmbeddingRequest,
@@ -92,8 +92,6 @@ pub(crate) async fn embeddings_handler(
 /// Process a chat-completion request and returns a chat-completion response with the answer from the model.
 pub(crate) async fn chat_completions_handler(
     mut req: Request<Body>,
-    template_ty: PromptTemplateType,
-    log_prompts: bool,
 ) -> Result<Response<Body>, hyper::Error> {
     if req.method().eq(&hyper::http::Method::OPTIONS) {
         let result = Response::builder()
@@ -123,20 +121,16 @@ pub(crate) async fn chat_completions_handler(
     };
 
     match chat_request.stream {
-        Some(true) => chat_completions_stream(chat_request, template_ty, log_prompts).await,
-        Some(false) | None => chat_completions(chat_request, template_ty, log_prompts).await,
+        Some(true) => chat_completions_stream(chat_request).await,
+        Some(false) | None => chat_completions(chat_request).await,
     }
 }
 
 /// Process a chat-completion request in stream mode and returns a chat-completion response with the answer from the model.
 async fn chat_completions_stream(
     mut chat_request: ChatCompletionRequest,
-    template_ty: PromptTemplateType,
-    log_prompts: bool,
 ) -> Result<Response<Body>, hyper::Error> {
-    match llama_core::chat::chat_completions_stream(&mut chat_request, template_ty, log_prompts)
-        .await
-    {
+    match llama_core::chat::chat_completions_stream(&mut chat_request).await {
         Ok(stream) => {
             let stream = stream.map_err(|e| e.to_string());
 
@@ -161,10 +155,8 @@ async fn chat_completions_stream(
 /// Process a chat-completion request and returns a chat-completion response with the answer from the model.
 async fn chat_completions(
     mut chat_request: ChatCompletionRequest,
-    template_ty: PromptTemplateType,
-    log_prompts: bool,
 ) -> Result<Response<Body>, hyper::Error> {
-    match llama_core::chat::chat_completions(&mut chat_request, template_ty, log_prompts).await {
+    match llama_core::chat::chat_completions(&mut chat_request).await {
         Ok(chat_completion_object) => {
             // serialize chat completion object
             let s = match serde_json::to_string(&chat_completion_object) {
@@ -198,7 +190,6 @@ async fn chat_completions(
 /// Note that the body of the request is deserialized to a `RagEmbeddingRequest` instance.
 pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
     mut req: Request<Body>,
-    log_prompts: bool,
 ) -> Result<Response<Body>, hyper::Error> {
     // parse request
     let body_bytes = to_bytes(req.body_mut()).await?;
@@ -209,7 +200,7 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
         }
     };
 
-    match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request, log_prompts).await {
+    match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
         Ok(embedding_response) => {
             // serialize embedding object
             match serde_json::to_string(&embedding_response) {
@@ -240,11 +231,8 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
 /// Note tht the body of the request is deserialized to a `EmbeddingRequest` instance.
 pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
     mut req: Request<Body>,
-    log_prompts: bool,
 ) -> Result<Response<Body>, hyper::Error> {
-    if log_prompts {
-        print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
-    }
+    print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
 
     // parse request
     let body_bytes = to_bytes(req.body_mut()).await?;
@@ -270,16 +258,12 @@ pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
     );
 
     let embedding_response =
-        match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request, log_prompts)
-            .await
-        {
+        match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
             Ok(embedding_response) => embedding_response,
             Err(e) => return error::internal_server_error(e.to_string()),
         };
 
-    if log_prompts {
-        print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
-    }
+    print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
 
     // serialize embedding object
     match serde_json::to_string(&embedding_response) {
@@ -306,12 +290,8 @@ pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
 /// Note that the body of the request is deserialized to a `ChatCompletionRequest` instance.
 pub(crate) async fn rag_query_handler(
     mut req: Request<Body>,
-    template_ty: PromptTemplateType,
-    log_prompts: bool,
 ) -> Result<Response<Body>, hyper::Error> {
-    if log_prompts {
-        print_log_begin_separator("RAG (Query user input)", Some("*"), None);
-    }
+    print_log_begin_separator("RAG (Query user input)", Some("*"), None);
 
     if req.method().eq(&hyper::http::Method::OPTIONS) {
         let result = Response::builder()
@@ -347,9 +327,7 @@ pub(crate) async fn rag_query_handler(
         }
     };
 
-    if log_prompts {
-        println!("\n[+] Computing embeddings for user query ...");
-    }
+    println!("\n[+] Computing embeddings for user query ...");
 
     // * compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
@@ -367,9 +345,7 @@ pub(crate) async fn rag_query_handler(
                         }
                     };
 
-                    if log_prompts {
-                        println!("    * user query: {}\n", query_text);
-                    }
+                    println!("    * user query: {}\n", query_text);
 
                     // get the available embedding models
                     let embedding_model_names = match llama_core::utils::embedding_model_names() {
@@ -385,10 +361,8 @@ pub(crate) async fn rag_query_handler(
                         user: chat_request.user.clone(),
                     };
 
-                    if log_prompts {
-                        if let Ok(request_str) = serde_json::to_string_pretty(&embedding_request) {
-                            println!("    * embedding request (json):\n\n{}", request_str);
-                        }
+                    if let Ok(request_str) = serde_json::to_string_pretty(&embedding_request) {
+                        println!("    * embedding request (json):\n\n{}", request_str);
                     }
 
                     let rag_embedding_request = RagEmbeddingRequest {
@@ -414,9 +388,7 @@ pub(crate) async fn rag_query_handler(
         None => return error::internal_server_error("No embeddings returned"),
     };
 
-    if log_prompts {
-        println!("\n[+] Retrieving context ...");
-    }
+    println!("\n[+] Retrieving context ...");
 
     // * retrieve context
     let scored_points = match llama_core::rag::rag_retrieve_context(
@@ -436,26 +408,20 @@ pub(crate) async fn rag_query_handler(
         }
     };
 
-    if log_prompts && scored_points.is_empty() {
-        println!(
-            "    * No point retrieved (score < threshold {})",
-            qdrant_config.score_threshold
-        );
-    }
+    println!(
+        "    * No point retrieved (score < threshold {})",
+        qdrant_config.score_threshold
+    );
 
     if !scored_points.is_empty() {
         // update messages with retrieved context
         let mut context = String::new();
         for (idx, point) in scored_points.iter().enumerate() {
-            if log_prompts {
-                println!("    * Point {}: score: {}", idx, point.score);
-            }
+            println!("    * Point {}: score: {}", idx, point.score);
 
             if let Some(payload) = &point.payload {
                 if let Some(source) = payload.get("source") {
-                    if log_prompts {
-                        println!("      Source: {}", source);
-                    }
+                    println!("      Source: {}", source);
 
                     context.push_str(source.to_string().as_str());
                     context.push_str("\n\n");
@@ -501,23 +467,19 @@ pub(crate) async fn rag_query_handler(
         }
     }
 
-    if log_prompts {
-        if scored_points.is_empty() {
-            println!("\n[+] Answer the user query ...");
-        } else {
-            println!("\n[+] Answer the user query with the context info ...");
-        }
+    if scored_points.is_empty() {
+        println!("\n[+] Answer the user query ...");
+    } else {
+        println!("\n[+] Answer the user query with the context info ...");
     }
 
     // chat completion
     let res = match chat_request.stream {
-        Some(true) => chat_completions_stream(chat_request, template_ty, log_prompts).await,
-        Some(false) | None => chat_completions(chat_request, template_ty, log_prompts).await,
+        Some(true) => chat_completions_stream(chat_request).await,
+        Some(false) | None => chat_completions(chat_request).await,
     };
 
-    if log_prompts {
-        print_log_end_separator(Some("*"), None);
-    }
+    print_log_end_separator(Some("*"), None);
 
     res
 }
@@ -985,8 +947,7 @@ pub(crate) async fn doc_to_embeddings(req: Request<Body>) -> Result<Response<Bod
         );
 
         let embedding_response =
-            match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request, true).await
-            {
+            match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
                 Ok(embedding_response) => embedding_response,
                 Err(e) => return error::internal_server_error(e.to_string()),
             };

@@ -4,12 +4,12 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-llama-core = "^0.6"
+llama-core = { path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/llama-core", version = "^0.6" }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-endpoints = "^0.5"
-chat-prompts = "^0.5"
+endpoints = { path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/endpoints", version = "^0.5" }
+chat-prompts = { path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/chat-prompts", version = "^0.5" }
 serde_yaml = "0.9"
 hyper_wasi = { version = "0.15", features = ["full"] }
 tokio_wasi = { version = "1", features = ["full"] }

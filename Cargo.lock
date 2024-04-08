@@ -312,13 +312,14 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bd3cadfb171887c2d752f33dbc7d9db07a75aba01d53975f83de2a68411e1a5"
 dependencies = [
  "base64 0.22.0",
+ "clap",
  "endpoints",
  "enum_dispatch",
  "image",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -349,6 +350,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90bc066a67923782aa8515dbaea16946c5bcc5addbd668bb80af688e53e548a0"
 dependencies = [
  "clap_builder",
+ "clap_derive",
 ]
 
 [[package]]
@@ -361,6 +363,18 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528131438037fd55894f62d6e9f068b8f45ac57ffa77517819645d10aed04f64"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -475,8 +489,6 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5558dc0f5a94df2057898b02762a68aeab66ee2484bb2319c590dc98f2a91452"
 dependencies = [
  "serde",
  "url 2.5.0",
@@ -1074,8 +1086,6 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 [[package]]
 name = "llama-core"
 version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3004e347e59fdb4e393f96aa0dfe0ec20e09d0a128f18f2cacac9af04de88e8d"
 dependencies = [
  "chat-prompts",
  "endpoints",
