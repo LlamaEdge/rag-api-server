@@ -362,8 +362,8 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
             Halt generation at PROMPT, return control
     -b, --batch-size <BATCH_SIZE>
             Batch size for prompt processing [default: 512]
-        --system-prompt <SYSTEM_PROMPT>
-            Global system prompt
+        --rag-prompt <RAG_PROMPT>
+            Custom rag prompt
         --qdrant-url <QDRANT_URL>
             URL of Qdrant REST Service [default: http://localhost:6333]
         --qdrant-collection-name <QDRANT_COLLECTION_NAME>

@@ -11,7 +11,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server, StatusCode,
 };
-use llama_core::{MetadataBuilder, ModelInfo};
+use llama_core::MetadataBuilder;
 use once_cell::sync::OnceCell;
 use std::{net::SocketAddr, path::PathBuf};
 use utils::{is_valid_url, log};
@@ -21,7 +21,7 @@ type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 // Qdrant config
 pub(crate) static QDRANT_CONFIG: OnceCell<QdrantConfig> = OnceCell::new();
 // global system prompt
-pub(crate) static GLOBAL_SYSTEM_PROMPT: OnceCell<String> = OnceCell::new();
+pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
 
 // default socket address
 const DEFAULT_SOCKET_ADDRESS: &str = "0.0.0.0:8080";
@@ -63,9 +63,9 @@ struct Cli {
     /// Batch size for prompt processing
     #[arg(short, long, default_value = "512")]
     batch_size: u64,
-    /// Global system prompt.
+    /// Custom rag prompt.
     #[arg(long)]
-    system_prompt: Option<String>,
+    rag_prompt: Option<String>,
     /// URL of Qdrant REST Service
     #[arg(long, default_value = "http://localhost:6333")]
     qdrant_url: String,
@@ -144,13 +144,11 @@ async fn main() -> Result<(), ServerError> {
         log(format!("[INFO] reverse prompt: {}", reverse_prompt));
     }
 
-    if let Some(system_prompt) = &cli.system_prompt {
+    if let Some(system_prompt) = &cli.rag_prompt {
         log(format!("[INFO] rag prompt: {}", system_prompt));
-        GLOBAL_SYSTEM_PROMPT
-            .set(system_prompt.clone())
-            .map_err(|_| {
-                ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
-            })?;
+        GLOBAL_RAG_PROMPT.set(system_prompt.clone()).map_err(|_| {
+            ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
+        })?;
     }
 
     if !is_valid_url(&cli.qdrant_url) {
@@ -200,11 +198,7 @@ async fn main() -> Result<(), ServerError> {
     .enable_plugin_log(cli.log_stat || cli.log_all)
     .build();
     // chat model
-    let chat_models = vec![ModelInfo {
-        model_name: chat_metadata.model_name.clone(),
-        model_alias: chat_metadata.model_alias.clone(),
-        metadata: chat_metadata,
-    }];
+    let chat_models = [chat_metadata];
 
     // create metadata for embedding model
     let embedding_metadata = MetadataBuilder::new(
@@ -218,14 +212,10 @@ async fn main() -> Result<(), ServerError> {
     .enable_plugin_log(cli.log_stat || cli.log_all)
     .build();
     // embedding model
-    let embedding_models = vec![ModelInfo {
-        model_name: embedding_metadata.model_name.clone(),
-        model_alias: embedding_metadata.model_alias.clone(),
-        metadata: embedding_metadata,
-    }];
+    let embedding_models = [embedding_metadata];
 
     // initialize the core context
-    llama_core::init_core_context(&chat_models, Some(&embedding_models)).map_err(|e| {
+    llama_core::init_rag_core_context(&chat_models[..], &embedding_models[..]).map_err(|e| {
         ServerError::Operation(format!("Failed to initialize the core context. {}", e))
     })?;
 

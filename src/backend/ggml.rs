@@ -1,7 +1,7 @@
 use crate::{
     error,
     utils::{print_log_begin_separator, print_log_end_separator},
-    GLOBAL_SYSTEM_PROMPT, QDRANT_CONFIG,
+    GLOBAL_RAG_PROMPT, QDRANT_CONFIG,
 };
 use chat_prompts::{error as ChatPromptsError, MergeRagContext};
 use endpoints::{
@@ -430,21 +430,21 @@ pub(crate) async fn rag_query_handler(
         }
 
         if chat_request.messages.is_empty() {
-            return error::internal_server_error("The global system prompt is not set.");
+            return error::internal_server_error("No message in the chat request.");
         }
         // get the global system prompt
-        let global_system_prompt = match GLOBAL_SYSTEM_PROMPT.get() {
-            Some(global_system_prompt) => global_system_prompt,
+        let global_rag_prompt = match GLOBAL_RAG_PROMPT.get() {
+            Some(global_rag_prompt) => global_rag_prompt,
             None => {
-                return error::internal_server_error("The global system prompt is not set.");
+                return error::internal_server_error("The global rag prompt is not set.");
             }
         };
-        // replace the original system message in chat request with the global system prompt
+        // replace the original system message in chat request with the global rag prompt
         match chat_request.messages[0] {
             ChatCompletionRequestMessage::System(_) => {
                 // create system message
                 let system_message = ChatCompletionRequestMessage::new_system_message(
-                    global_system_prompt.to_owned(),
+                    global_rag_prompt.to_owned(),
                     chat_request.messages[0].name().cloned(),
                 );
                 // replace the original system message
@@ -453,7 +453,7 @@ pub(crate) async fn rag_query_handler(
             _ => {
                 // create system message
                 let system_message = ChatCompletionRequestMessage::new_system_message(
-                    global_system_prompt.to_owned(),
+                    global_rag_prompt.to_owned(),
                     chat_request.messages[0].name().cloned(),
                 );
                 // insert system message
