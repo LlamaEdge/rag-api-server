@@ -713,7 +713,7 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
         ));
     }
 
-    match llama_core::rag::chunk_text(&contents, extension) {
+    match llama_core::rag::chunk_text(&contents, extension, chunks_request.chunk_capacity) {
         Ok(chunks) => {
             let chunks_response = ChunksResponse {
                 id: chunks_request.id,
@@ -745,7 +745,10 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
     }
 }
 
-pub(crate) async fn doc_to_embeddings(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+pub(crate) async fn doc_to_embeddings(
+    req: Request<Body>,
+    chunk_capacity: usize,
+) -> Result<Response<Body>, hyper::Error> {
     // upload the target rag document
     let file_object = if req.method() == Method::POST {
         let boundary = "boundary=";
@@ -907,7 +910,7 @@ pub(crate) async fn doc_to_embeddings(req: Request<Body>) -> Result<Response<Bod
             ));
         }
 
-        match llama_core::rag::chunk_text(&contents, extension) {
+        match llama_core::rag::chunk_text(&contents, extension, chunk_capacity) {
             Ok(chunks) => chunks,
             Err(e) => return error::internal_server_error(e.to_string()),
         }

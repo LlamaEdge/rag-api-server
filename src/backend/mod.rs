@@ -5,6 +5,7 @@ use hyper::{Body, Request, Response};
 
 pub(crate) async fn handle_llama_request(
     req: Request<Body>,
+    chunk_capacity: usize,
 ) -> Result<Response<Body>, hyper::Error> {
     match req.uri().path() {
         "/v1/chat/completions" => match QDRANT_CONFIG.get() {
@@ -18,7 +19,7 @@ pub(crate) async fn handle_llama_request(
         },
         "/v1/files" => ggml::files_handler(req).await,
         "/v1/chunks" => ggml::chunks_handler(req).await,
-        "/v1/create/rag" => ggml::doc_to_embeddings(req).await,
+        "/v1/create/rag" => ggml::doc_to_embeddings(req, chunk_capacity).await,
         _ => error::invalid_endpoint(req.uri().path()),
     }
 }

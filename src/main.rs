@@ -72,12 +72,15 @@ struct Cli {
     /// Name of Qdrant collection
     #[arg(long, default_value = "default")]
     qdrant_collection_name: String,
-    /// Max number of retrieved result
-    #[arg(long, default_value = "3", value_parser = clap::value_parser!(u64))]
+    /// Max number of retrieved result (no less than 1)
+    #[arg(long, default_value = "5", value_parser = clap::value_parser!(u64))]
     qdrant_limit: u64,
     /// Minimal score threshold for the search result
     #[arg(long, default_value = "0.4", value_parser = clap::value_parser!(f32))]
     qdrant_score_threshold: f32,
+    /// Maximum number of tokens each chunk contains
+    #[arg(long, default_value = "100", value_parser = clap::value_parser!(usize))]
+    chunk_capacity: usize,
     /// Print prompt strings to stdout
     #[arg(long)]
     log_prompts: bool,
@@ -181,6 +184,10 @@ async fn main() -> Result<(), ServerError> {
         .set(qdrant_config)
         .map_err(|_| ServerError::Operation("Failed to set `QDRANT_CONFIG`.".to_string()))?;
 
+    log(format!(
+        "[INFO] Chunk capacity (in tokens): {}",
+        &cli.chunk_capacity
+    ));
     log(format!("[INFO] Enable prompt log: {}", &cli.log_prompts));
     log(format!("[INFO] Enable plugin log: {}", &cli.log_stat));
     log(format!("[INFO] Socket address: {}", &cli.socket_addr));
@@ -230,8 +237,13 @@ async fn main() -> Result<(), ServerError> {
 
     let new_service = make_service_fn(move |_| {
         let web_ui = cli.web_ui.to_string_lossy().to_string();
+        let chunk_capacity = cli.chunk_capacity;
 
-        async move { Ok::<_, Error>(service_fn(move |req| handle_request(req, web_ui.clone()))) }
+        async move {
+            Ok::<_, Error>(service_fn(move |req| {
+                handle_request(req, chunk_capacity, web_ui.clone())
+            }))
+        }
     });
 
     // socket address
@@ -255,6 +267,7 @@ async fn main() -> Result<(), ServerError> {
 
 async fn handle_request(
     req: Request<Body>,
+    chunk_capacity: usize,
     web_ui: String,
 ) -> Result<Response<Body>, hyper::Error> {
     let path_str = req.uri().path();
@@ -266,7 +279,7 @@ async fn handle_request(
 
     match root_path.as_str() {
         "/echo" => Ok(Response::new(Body::from("echo test"))),
-        "/v1" => backend::handle_llama_request(req).await,
+        "/v1" => backend::handle_llama_request(req, chunk_capacity).await,
         _ => Ok(static_response(path_str, web_ui)),
     }
 }
