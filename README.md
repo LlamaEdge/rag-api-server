@@ -220,7 +220,7 @@ The embeddings returned are like below:
 
 #### `/v1/create/rag` endpoint
 
-`/v1/create/rag` endpoint provides users a one-click way to convert a text or markdown file to embeddings directly. The effect of the endpoint is equivalent to running `/v1/files` + `/v1/chunks` + `/v1/embeddings` sequently.
+`/v1/create/rag` endpoint provides users a one-click way to convert a text or markdown file to embeddings directly. The effect of the endpoint is equivalent to running `/v1/files` + `/v1/chunks` + `/v1/embeddings` sequently. Note that the `--chunk-capacity` CLI option is required for the endpoint. The default value of the option is `100`. You can set it to different values while starting LlamaEdge-RAG API server.
 
 <details> <summary> Example </summary>
 
@@ -372,6 +372,8 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
             Max number of retrieved result [default: 3]
         --qdrant-score-threshold <QDRANT_SCORE_THRESHOLD>
             Minimal score threshold for the search result [default: 0.4]
+        --chunk-capacity <CHUNK_CAPACITY>
+            Maximum number of tokens each chunk contains [default: 100]
         --log-prompts
             Print prompt strings to stdout
         --log-stat
