@@ -311,9 +311,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.5.5"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5b0aa9e7310d72a266801833b1d54fb9a357a4e8a1081a15d150e759a1669e9"
+checksum = "8a6655d1d4d9912a02bba6d07216d966030b9760fd21c89739b1814a39828064"
 dependencies = [
  "base64 0.22.0",
  "clap",
