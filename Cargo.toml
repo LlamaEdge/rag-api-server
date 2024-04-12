@@ -4,12 +4,12 @@ version = "0.3.1"
 edition = "2021"
 
 [dependencies]
-llama-core = { version = "^0.7" }
+llama-core = { version = "=0.7.1" }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-endpoints = { version = "^0.6" }
-chat-prompts = { version = "^0.5" }
+endpoints = { version = "=0.6.0" }
+chat-prompts = { version = "=0.5.6" }
 serde_yaml = "0.9"
 hyper_wasi = { version = "0.15", features = ["full"] }
 tokio_wasi = { version = "1", features = ["full"] }
