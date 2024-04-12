@@ -63,6 +63,7 @@ pub(crate) async fn embeddings_handler(
         }
     };
 
+    println!("\n[+] Running embeddings handler ...");
     match llama_core::embeddings::embeddings(&embedding_request).await {
         Ok(embedding_response) => {
             // serialize embedding object
@@ -524,6 +525,8 @@ impl MergeRagContext for RagPromptBuilder {
 
 pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     if req.method() == Method::POST {
+        println!("\n[+] Running files handler ...");
+
         let boundary = "boundary=";
 
         let boundary = req.headers().get("content-type").and_then(|ct| {
@@ -572,6 +575,8 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                 // create a unique file id
                 let id = format!("file_{}", uuid::Uuid::new_v4());
 
+                println!("    * Saving to {}/{}", &id, &filename);
+
                 // save the file
                 let path = Path::new("archives");
                 if !path.exists() {
@@ -613,6 +618,7 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
             }
         }
 
+        println!("[+] File uploaded successfully.\n");
         match file_object {
             Some(fo) => {
                 // serialize chat completion object
@@ -650,6 +656,8 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
 }
 
 pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    println!("\n[+] Running chunks handler ...");
+
     // parse request
     let body_bytes = to_bytes(req.body_mut()).await?;
     let chunks_request: ChunksRequest = match serde_json::from_slice(&body_bytes) {
@@ -659,6 +667,7 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
         }
     };
 
+    println!("[+] Detecting the target file ...");
     // check if the archives directory exists
     let path = Path::new("archives");
     if !path.exists() {
@@ -681,6 +690,10 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
         );
         return error::internal_server_error(message);
     }
+    println!(
+        "    * Found {}/{}",
+        &chunks_request.id, &chunks_request.filename
+    );
 
     // get the extension of the archived file
     let extension = match file_path.extension().and_then(std::ffi::OsStr::to_str) {
@@ -720,6 +733,8 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
                 filename: chunks_request.filename,
                 chunks,
             };
+
+            println!("[+] File chunked successfully.\n");
 
             // serialize embedding object
             match serde_json::to_string(&chunks_response) {
