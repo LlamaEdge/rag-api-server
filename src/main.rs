@@ -104,7 +104,7 @@ async fn main() -> Result<(), ServerError> {
 
     // log the version of the server
     log(format!(
-        "\n[INFO] LlamaEdge version: {}",
+        "\n[INFO] LlamaEdge-RAG version: {}",
         env!("CARGO_PKG_VERSION")
     ));
 
