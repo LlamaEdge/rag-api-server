@@ -9,7 +9,7 @@ futures = { version = "0.3.6", default-features = false, features = ["async-awai
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 endpoints = { version = "=0.6.0" }
-chat-prompts = { version = "=0.5.6" }
+chat-prompts = { version = "=0.5.7" }
 serde_yaml = "0.9"
 hyper_wasi = { version = "0.15", features = ["full"] }
 tokio_wasi = { version = "1", features = ["full"] }
