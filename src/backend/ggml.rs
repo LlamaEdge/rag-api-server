@@ -462,8 +462,20 @@ pub(crate) async fn rag_query_handler(
             }
         };
 
+        let prompt_template =
+            match llama_core::utils::chat_prompt_template(chat_request.model.as_deref()) {
+                Ok(prompt_template) => prompt_template,
+                Err(e) => {
+                    return error::internal_server_error(e.to_string());
+                }
+            };
+
         // insert rag context into chat request
-        if let Err(e) = RagPromptBuilder::build(&mut chat_request.messages, &[context]) {
+        if let Err(e) = RagPromptBuilder::build(
+            &mut chat_request.messages,
+            &[context],
+            prompt_template.has_system_prompt(),
+        ) {
             return error::internal_server_error(e.to_string());
         }
     }
@@ -491,6 +503,7 @@ impl MergeRagContext for RagPromptBuilder {
     fn build(
         messages: &mut Vec<endpoints::chat::ChatCompletionRequestMessage>,
         context: &[String],
+        has_system_prompt: bool,
     ) -> ChatPromptsError::Result<()> {
         if messages.is_empty() {
             return Err(ChatPromptsError::PromptError::NoMessages);
@@ -504,19 +517,72 @@ impl MergeRagContext for RagPromptBuilder {
 
         let context = context[0].trim_end();
 
-        // fill in the context for the system message
-        if let ChatCompletionRequestMessage::System(message) = &messages[0] {
-            // compose new system message content
-            let content = format!(
-                "{system_message}\n{context}",
-                system_message = message.content().trim(),
-                context = context.trim_end()
-            );
-            // create system message
-            let system_message =
-                ChatCompletionRequestMessage::new_system_message(content, message.name().cloned());
-            // replace the original system message
-            messages[0] = system_message;
+        match has_system_prompt {
+            true =>
+            // fill in the context for the system message
+            {
+                match &messages[0] {
+                    ChatCompletionRequestMessage::System(message) => {
+                        // compose new system message content
+                        let content = format!(
+                            "{system_message}\n{context}",
+                            system_message = message.content().trim(),
+                            context = context.trim_end()
+                        );
+                        // create system message
+                        let system_message = ChatCompletionRequestMessage::new_system_message(
+                            content,
+                            message.name().cloned(),
+                        );
+                        // replace the original system message
+                        messages[0] = system_message;
+                    }
+                    _ => {
+                        // prepare system message
+                        let content = format!("Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n{}", context.trim_end());
+
+                        // create system message
+                        let system_message = ChatCompletionRequestMessage::new_system_message(
+                            content,
+                            messages[0].name().cloned(),
+                        );
+                        // insert system message
+                        messages.insert(0, system_message);
+                    }
+                }
+            }
+            false => {
+                let len = messages.len();
+                // fill in the context for the latest user message
+                match &messages.last() {
+                    Some(ChatCompletionRequestMessage::User(message)) => {
+                        if let ChatCompletionUserMessageContent::Text(content) = message.content() {
+                            // compose new user message content
+                            let content = format!(
+                                    "{context}\nBased on the pieces of context above, answer the question below:\n{user_message}",
+                                    user_message = content.trim(),
+                                    context = context.trim_end()
+                                );
+
+                            let content = ChatCompletionUserMessageContent::Text(content);
+
+                            // create user message
+                            let user_message = ChatCompletionRequestMessage::new_user_message(
+                                content,
+                                message.name().cloned(),
+                            );
+                            // replace the original user message
+                            messages[len - 1] = user_message;
+                        }
+                    }
+                    _ => {
+                        return Err(ChatPromptsError::PromptError::BadMessages(
+                            "The last message in the chat request should be a user message."
+                                .to_string(),
+                        ))
+                    }
+                }
+            }
         }
 
         Ok(())
