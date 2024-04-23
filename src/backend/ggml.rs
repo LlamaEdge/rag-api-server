@@ -1,7 +1,7 @@
 use crate::{
     error,
     utils::{print_log_begin_separator, print_log_end_separator},
-    GLOBAL_RAG_PROMPT, QDRANT_CONFIG,
+    GLOBAL_RAG_PROMPT, SERVER_INFO,
 };
 use chat_prompts::{error as ChatPromptsError, MergeRagContext};
 use endpoints::{
@@ -47,83 +47,6 @@ pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
     match result {
         Ok(response) => Ok(response),
         Err(e) => error::internal_server_error(e.to_string()),
-    }
-}
-
-/// Compute embeddings for the input text and return the embeddings object.
-pub(crate) async fn embeddings_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
-    // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
-    let embedding_request: EmbeddingRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(embedding_request) => embedding_request,
-        Err(e) => {
-            return error::bad_request(format!("Fail to parse embedding request: {msg}", msg = e));
-        }
-    };
-
-    println!("\n[+] Running embeddings handler ...");
-    match llama_core::embeddings::embeddings(&embedding_request).await {
-        Ok(embedding_response) => {
-            // serialize embedding object
-            match serde_json::to_string(&embedding_response) {
-                Ok(s) => {
-                    // return response
-                    let result = Response::builder()
-                        .header("Access-Control-Allow-Origin", "*")
-                        .header("Access-Control-Allow-Methods", "*")
-                        .header("Access-Control-Allow-Headers", "*")
-                        .body(Body::from(s));
-                    match result {
-                        Ok(response) => Ok(response),
-                        Err(e) => error::internal_server_error(e.to_string()),
-                    }
-                }
-                Err(e) => error::internal_server_error(format!(
-                    "Fail to serialize embedding object. {}",
-                    e
-                )),
-            }
-        }
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
-}
-
-/// Process a chat-completion request and returns a chat-completion response with the answer from the model.
-pub(crate) async fn chat_completions_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
-    if req.method().eq(&hyper::http::Method::OPTIONS) {
-        let result = Response::builder()
-            .header("Access-Control-Allow-Origin", "*")
-            .header("Access-Control-Allow-Methods", "*")
-            .header("Access-Control-Allow-Headers", "*")
-            .body(Body::empty());
-
-        match result {
-            Ok(response) => return Ok(response),
-            Err(e) => {
-                return error::internal_server_error(e.to_string());
-            }
-        }
-    }
-
-    // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
-    let chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(chat_request) => chat_request,
-        Err(e) => {
-            return error::bad_request(format!(
-                "Fail to parse chat completion request: {msg}",
-                msg = e
-            ));
-        }
-    };
-
-    match chat_request.stream {
-        Some(true) => chat_completions_stream(chat_request).await,
-        Some(false) | None => chat_completions(chat_request).await,
     }
 }
 
@@ -244,18 +167,18 @@ pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
         }
     };
 
-    let qdrant_config = match QDRANT_CONFIG.get() {
-        Some(qdrant_config) => qdrant_config,
+    let server_info = match SERVER_INFO.get() {
+        Some(server_info) => server_info,
         None => {
-            return error::internal_server_error("The Qdrant config is not set.");
+            return error::internal_server_error("The server info is not set.");
         }
     };
 
     // create rag embedding request
     let rag_embedding_request = RagEmbeddingRequest::from_embedding_request(
         embedding_request,
-        qdrant_config.url.clone(),
-        qdrant_config.collection_name.clone(),
+        server_info.qdrant_config.url.clone(),
+        server_info.qdrant_config.collection_name.clone(),
     );
 
     let embedding_response =
@@ -321,10 +244,10 @@ pub(crate) async fn rag_query_handler(
         }
     };
 
-    let qdrant_config = match QDRANT_CONFIG.get() {
-        Some(qdrant_config) => qdrant_config,
+    let server_info = match SERVER_INFO.get() {
+        Some(server_info) => server_info,
         None => {
-            return error::internal_server_error("The Qdrant config is not set.");
+            return error::internal_server_error("The server info is not set.");
         }
     };
 
@@ -368,8 +291,8 @@ pub(crate) async fn rag_query_handler(
 
                     let rag_embedding_request = RagEmbeddingRequest {
                         embedding_request,
-                        qdrant_url: qdrant_config.url.clone(),
-                        qdrant_collection_name: qdrant_config.collection_name.clone(),
+                        qdrant_url: server_info.qdrant_config.url.clone(),
+                        qdrant_collection_name: server_info.qdrant_config.collection_name.clone(),
                     };
 
                     // compute embeddings for query
@@ -394,10 +317,10 @@ pub(crate) async fn rag_query_handler(
     // * retrieve context
     let scored_points = match llama_core::rag::rag_retrieve_context(
         query_embedding.as_slice(),
-        qdrant_config.url.to_string().as_str(),
-        qdrant_config.collection_name.as_str(),
-        qdrant_config.limit as usize,
-        Some(qdrant_config.score_threshold),
+        server_info.qdrant_config.url.to_string().as_str(),
+        server_info.qdrant_config.collection_name.as_str(),
+        server_info.qdrant_config.limit as usize,
+        Some(server_info.qdrant_config.score_threshold),
     )
     .await
     {
@@ -411,7 +334,7 @@ pub(crate) async fn rag_query_handler(
 
     println!(
         "    * No point retrieved (score < threshold {})",
-        qdrant_config.score_threshold
+        server_info.qdrant_config.score_threshold
     );
 
     if !scored_points.is_empty() {
@@ -1016,18 +939,25 @@ pub(crate) async fn doc_to_embeddings(
             user: None,
         };
 
-        let qdrant_config = match QDRANT_CONFIG.get() {
-            Some(qdrant_config) => qdrant_config,
+        // let qdrant_config = match QDRANT_CONFIG.get() {
+        //     Some(qdrant_config) => qdrant_config,
+        //     None => {
+        //         return error::internal_server_error("The Qdrant config is not set.");
+        //     }
+        // };
+
+        let server_info = match SERVER_INFO.get() {
+            Some(server_info) => server_info,
             None => {
-                return error::internal_server_error("The Qdrant config is not set.");
+                return error::internal_server_error("The server info is not set.");
             }
         };
 
         // create rag embedding request
         let rag_embedding_request = RagEmbeddingRequest::from_embedding_request(
             embedding_request,
-            qdrant_config.url.clone(),
-            qdrant_config.collection_name.clone(),
+            server_info.qdrant_config.url.clone(),
+            server_info.qdrant_config.collection_name.clone(),
         );
 
         let embedding_response =
@@ -1058,5 +988,34 @@ pub(crate) async fn doc_to_embeddings(
         Err(e) => {
             error::internal_server_error(format!("Fail to serialize embedding object. {}", e))
         }
+    }
+}
+
+pub(crate) async fn server_info() -> Result<Response<Body>, hyper::Error> {
+    // get the server info
+    let server_info = match SERVER_INFO.get() {
+        Some(server_info) => server_info,
+        None => {
+            return error::internal_server_error("The server info is not set.");
+        }
+    };
+
+    // serialize server info
+    let s = match serde_json::to_string(&server_info) {
+        Ok(s) => s,
+        Err(e) => {
+            return error::internal_server_error(format!("Fail to serialize server info. {}", e));
+        }
+    };
+
+    // return response
+    let result = Response::builder()
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "*")
+        .header("Access-Control-Allow-Headers", "*")
+        .body(Body::from(s));
+    match result {
+        Ok(response) => Ok(response),
+        Err(e) => error::internal_server_error(e.to_string()),
     }
 }

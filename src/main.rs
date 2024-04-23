@@ -13,15 +13,16 @@ use hyper::{
 };
 use llama_core::MetadataBuilder;
 use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::PathBuf};
 use utils::{is_valid_url, log};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
-// Qdrant config
-pub(crate) static QDRANT_CONFIG: OnceCell<QdrantConfig> = OnceCell::new();
 // global system prompt
 pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
+// server info
+pub(crate) static SERVER_INFO: OnceCell<ServerInfo> = OnceCell::new();
 
 // default socket address
 const DEFAULT_SOCKET_ADDRESS: &str = "0.0.0.0:8080";
@@ -102,10 +103,16 @@ struct Cli {
 async fn main() -> Result<(), ServerError> {
     let cli = Cli::parse();
 
+    // create a ServerInfo instance
+    let mut server_info = ServerInfo::default();
+
+    // set the version of the server
+    server_info.version = env!("CARGO_PKG_VERSION").to_string();
+
     // log the version of the server
     log(format!(
         "\n[INFO] LlamaEdge-RAG version: {}",
-        env!("CARGO_PKG_VERSION")
+        &server_info.version
     ));
 
     // log the cli options
@@ -173,16 +180,23 @@ async fn main() -> Result<(), ServerError> {
         "[INFO] Qdrant score threshold: {}",
         &cli.qdrant_score_threshold
     ));
-    // set QDRANT_CONFIG
-    let qdrant_config = QdrantConfig {
+    // // set QDRANT_CONFIG
+    // let qdrant_config = QdrantConfig {
+    //     url: cli.qdrant_url,
+    //     collection_name: cli.qdrant_collection_name,
+    //     limit: cli.qdrant_limit,
+    //     score_threshold: cli.qdrant_score_threshold,
+    // };
+    // QDRANT_CONFIG
+    //     .set(qdrant_config)
+    //     .map_err(|_| ServerError::Operation("Failed to set `QDRANT_CONFIG`.".to_string()))?;
+
+    server_info.qdrant_config = QdrantConfig {
         url: cli.qdrant_url,
         collection_name: cli.qdrant_collection_name,
         limit: cli.qdrant_limit,
         score_threshold: cli.qdrant_score_threshold,
     };
-    QDRANT_CONFIG
-        .set(qdrant_config)
-        .map_err(|_| ServerError::Operation("Failed to set `QDRANT_CONFIG`.".to_string()))?;
 
     log(format!(
         "[INFO] Chunk capacity (in tokens): {}",
@@ -204,6 +218,24 @@ async fn main() -> Result<(), ServerError> {
     .enable_prompts_log(cli.log_prompts || cli.log_all)
     .enable_plugin_log(cli.log_stat || cli.log_all)
     .build();
+
+    let chat_model_info = Model {
+        name: chat_metadata.model_name.clone(),
+        ty: "chat".to_string(),
+        prompt_template: chat_metadata.prompt_template,
+        n_predict: chat_metadata.n_predict,
+        reverse_prompt: chat_metadata.reverse_prompt.clone(),
+        n_gpu_layers: chat_metadata.n_gpu_layers,
+        ctx_size: chat_metadata.ctx_size,
+        batch_size: chat_metadata.batch_size,
+        temperature: chat_metadata.temperature,
+        top_p: chat_metadata.top_p,
+        repeat_penalty: chat_metadata.repeat_penalty,
+        presence_penalty: chat_metadata.presence_penalty,
+        frequency_penalty: chat_metadata.frequency_penalty,
+    };
+    server_info.models.push(chat_model_info);
+
     // chat model
     let chat_models = [chat_metadata];
 
@@ -218,6 +250,24 @@ async fn main() -> Result<(), ServerError> {
     .enable_prompts_log(cli.log_prompts || cli.log_all)
     .enable_plugin_log(cli.log_stat || cli.log_all)
     .build();
+
+    let embedding_model_info = Model {
+        name: embedding_metadata.model_name.clone(),
+        ty: "embedding".to_string(),
+        prompt_template: embedding_metadata.prompt_template,
+        n_predict: embedding_metadata.n_predict,
+        reverse_prompt: embedding_metadata.reverse_prompt.clone(),
+        n_gpu_layers: embedding_metadata.n_gpu_layers,
+        ctx_size: embedding_metadata.ctx_size,
+        batch_size: embedding_metadata.batch_size,
+        temperature: embedding_metadata.temperature,
+        top_p: embedding_metadata.top_p,
+        repeat_penalty: embedding_metadata.repeat_penalty,
+        presence_penalty: embedding_metadata.presence_penalty,
+        frequency_penalty: embedding_metadata.frequency_penalty,
+    };
+    server_info.models.push(embedding_model_info);
+
     // embedding model
     let embedding_models = [embedding_metadata];
 
@@ -229,11 +279,28 @@ async fn main() -> Result<(), ServerError> {
     // get the plugin version info
     let plugin_info =
         llama_core::get_plugin_info().map_err(|e| ServerError::Operation(e.to_string()))?;
-    log(format!(
-        "[INFO] Wasi-nn-ggml plugin: b{build_number} (commit {commit_id})",
+    server_info.plugin_version = format!(
+        "b{build_number} (commit {commit_id})",
         build_number = plugin_info.build_number,
         commit_id = plugin_info.commit_id,
+    );
+    log(format!(
+        "[INFO] Wasi-nn-ggml plugin: {}",
+        &server_info.plugin_version
     ));
+
+    // socket address
+    let addr = cli
+        .socket_addr
+        .parse::<SocketAddr>()
+        .map_err(|e| ServerError::SocketAddr(e.to_string()))?;
+
+    // set the server info
+    server_info.port = addr.port().to_string();
+
+    SERVER_INFO
+        .set(server_info)
+        .map_err(|_| ServerError::Operation("Failed to set `SERVER_INFO`.".to_string()))?;
 
     let new_service = make_service_fn(move |_| {
         let web_ui = cli.web_ui.to_string_lossy().to_string();
@@ -245,14 +312,7 @@ async fn main() -> Result<(), ServerError> {
             }))
         }
     });
-
-    // socket address
-    let addr = cli
-        .socket_addr
-        .parse::<SocketAddr>()
-        .map_err(|e| ServerError::SocketAddr(e.to_string()))?;
     let server = Server::bind(&addr).serve(new_service);
-
     log(format!(
         "[INFO] LlamaEdge-RAG API server listening on http://{}:{}",
         addr.ip(),
@@ -309,10 +369,40 @@ fn static_response(path_str: &str, root: String) -> Response<Body> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct QdrantConfig {
     pub(crate) url: String,
     pub(crate) collection_name: String,
     pub(crate) limit: u64,
     pub(crate) score_threshold: f32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Model {
+    // model name
+    name: String,
+    // type: chat or embedding
+    #[serde(rename = "type")]
+    ty: String,
+    pub prompt_template: PromptTemplateType,
+    pub n_predict: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reverse_prompt: Option<String>,
+    pub n_gpu_layers: u64,
+    pub ctx_size: u64,
+    pub batch_size: u64,
+    pub temperature: f64,
+    pub top_p: f64,
+    pub repeat_penalty: f64,
+    pub presence_penalty: f64,
+    pub frequency_penalty: f64,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub(crate) struct ServerInfo {
+    version: String,
+    plugin_version: String,
+    port: String,
+    models: Vec<Model>,
+    qdrant_config: QdrantConfig,
 }

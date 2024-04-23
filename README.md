@@ -13,6 +13,7 @@
       - [`/v1/chunks` endpoint](#v1chunks-endpoint)
       - [`/v1/embeddings` endpoint](#v1embeddings-endpoint)
       - [`/v1/create/rag` endpoint](#v1createrag-endpoint)
+      - [`/v1/info` endpoint](#v1info-endpoint)
   - [Setup](#setup)
   - [Build](#build)
   - [Execute](#execute)
@@ -272,6 +273,66 @@ The embeddings returned are like below:
         "prompt_tokens": 491,
         "completion_tokens": 0,
         "total_tokens": 491
+    }
+}
+```
+
+</details>
+
+#### `/v1/info` endpoint
+
+`/v1/info` endpoint provides the information of the API server, including the version of the server, the parameters of models, and etc.
+
+<details> <summary> Example </summary>
+
+You can use `curl` to test it on a new terminal:
+
+```bash
+curl -X POST http://localhost:8080/v1/info -H 'accept:application/json'
+```
+
+If the command runs successfully, you should see the similar output as below in your terminal:
+
+```json
+{
+    "version": "0.3.4",
+    "plugin_version": "b2694 (commit 0d56246f)",
+    "port": "8080",
+    "models": [
+        {
+            "name": "Llama-2-7b-chat-hf-Q5_K_M",
+            "type": "chat",
+            "prompt_template": "Llama2Chat",
+            "n_predict": 1024,
+            "n_gpu_layers": 100,
+            "ctx_size": 4096,
+            "batch_size": 512,
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0
+        },
+        {
+            "name": "all-MiniLM-L6-v2-ggml-model-f16",
+            "type": "embedding",
+            "prompt_template": "Llama2Chat",
+            "n_predict": 1024,
+            "n_gpu_layers": 100,
+            "ctx_size": 384,
+            "batch_size": 512,
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0
+        }
+    ],
+    "qdrant_config": {
+        "url": "http://localhost:6333",
+        "collection_name": "default",
+        "limit": 5,
+        "score_threshold": 0.4
     }
 }
 ```
