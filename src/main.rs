@@ -104,10 +104,10 @@ async fn main() -> Result<(), ServerError> {
     let cli = Cli::parse();
 
     // create a ServerInfo instance
-    let mut server_info = ServerInfo::default();
-
-    // set the version of the server
-    server_info.version = env!("CARGO_PKG_VERSION").to_string();
+    let mut server_info = ServerInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        ..Default::default()
+    };
 
     // log the version of the server
     log(format!(
