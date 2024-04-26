@@ -3,7 +3,7 @@ mod error;
 mod utils;
 
 use anyhow::Result;
-use chat_prompts::PromptTemplateType;
+use chat_prompts::{MergeRagContextPolicy, PromptTemplateType};
 use clap::Parser;
 use error::ServerError;
 use hyper::{
@@ -33,7 +33,7 @@ pub struct AppState {
 }
 
 #[derive(Debug, Parser)]
-#[command(author, about, version, long_about=None)]
+#[command(name = "LlamaEdge-RAG API Server", version = env!("CARGO_PKG_VERSION"), author = env!("CARGO_PKG_AUTHORS"), about = "LlamaEdge-RAG API Server")]
 struct Cli {
     /// Sets names for chat and embedding models. The names are separated by comma without space, for example, '--model-name Llama-2-7b,all-minilm'.
     #[arg(short, long, value_delimiter = ',', required = true)]
@@ -67,6 +67,9 @@ struct Cli {
     /// Custom rag prompt.
     #[arg(long)]
     rag_prompt: Option<String>,
+    /// Strategy for merging RAG context into chat messages.
+    #[arg(long = "rag-policy", default_value_t, value_enum)]
+    policy: MergeRagContextPolicy,
     /// URL of Qdrant REST Service
     #[arg(long, default_value = "http://localhost:6333")]
     qdrant_url: String,
@@ -103,16 +106,11 @@ struct Cli {
 async fn main() -> Result<(), ServerError> {
     let cli = Cli::parse();
 
-    // create a ServerInfo instance
-    let mut server_info = ServerInfo {
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        ..Default::default()
-    };
-
     // log the version of the server
+    let server_version = env!("CARGO_PKG_VERSION").to_string();
     log(format!(
         "\n[INFO] LlamaEdge-RAG version: {}",
-        &server_info.version
+        &server_version
     ));
 
     // log the cli options
@@ -154,9 +152,9 @@ async fn main() -> Result<(), ServerError> {
         log(format!("[INFO] reverse prompt: {}", reverse_prompt));
     }
 
-    if let Some(system_prompt) = &cli.rag_prompt {
-        log(format!("[INFO] rag prompt: {}", system_prompt));
-        GLOBAL_RAG_PROMPT.set(system_prompt.clone()).map_err(|_| {
+    if let Some(rag_prompt) = &cli.rag_prompt {
+        log(format!("[INFO] rag prompt: {}", rag_prompt));
+        GLOBAL_RAG_PROMPT.set(rag_prompt.clone()).map_err(|_| {
             ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
         })?;
     }
@@ -180,18 +178,7 @@ async fn main() -> Result<(), ServerError> {
         "[INFO] Qdrant score threshold: {}",
         &cli.qdrant_score_threshold
     ));
-    // // set QDRANT_CONFIG
-    // let qdrant_config = QdrantConfig {
-    //     url: cli.qdrant_url,
-    //     collection_name: cli.qdrant_collection_name,
-    //     limit: cli.qdrant_limit,
-    //     score_threshold: cli.qdrant_score_threshold,
-    // };
-    // QDRANT_CONFIG
-    //     .set(qdrant_config)
-    //     .map_err(|_| ServerError::Operation("Failed to set `QDRANT_CONFIG`.".to_string()))?;
-
-    server_info.qdrant_config = QdrantConfig {
+    let qdrant_config = QdrantConfig {
         url: cli.qdrant_url,
         collection_name: cli.qdrant_collection_name,
         limit: cli.qdrant_limit,
@@ -206,6 +193,15 @@ async fn main() -> Result<(), ServerError> {
     log(format!("[INFO] Enable plugin log: {}", &cli.log_stat));
     log(format!("[INFO] Socket address: {}", &cli.socket_addr));
 
+    // RAG policy
+    let mut policy = cli.policy;
+    log(format!("[INFO] RAG policy: {}", policy));
+    if policy == MergeRagContextPolicy::SystemMessage && !cli.prompt_template.has_system_prompt() {
+        println!("       * [WARINING] The chat model does not support system message, while the '--policy' option sets to \"{}\". Update the RAG policy to {}.", cli.policy, MergeRagContextPolicy::LastUserMessage);
+        policy = MergeRagContextPolicy::LastUserMessage;
+        log(format!("       * Updated RAG policy: {}", policy));
+    }
+
     // create metadata for chat model
     let chat_metadata = MetadataBuilder::new(
         cli.model_name[0].clone(),
@@ -219,7 +215,7 @@ async fn main() -> Result<(), ServerError> {
     .enable_plugin_log(cli.log_stat || cli.log_all)
     .build();
 
-    let chat_model_info = Model {
+    let chat_model_info = ModelConfig {
         name: chat_metadata.model_name.clone(),
         ty: "chat".to_string(),
         prompt_template: chat_metadata.prompt_template,
@@ -234,7 +230,6 @@ async fn main() -> Result<(), ServerError> {
         presence_penalty: chat_metadata.presence_penalty,
         frequency_penalty: chat_metadata.frequency_penalty,
     };
-    server_info.models.push(chat_model_info);
 
     // chat model
     let chat_models = [chat_metadata];
@@ -251,7 +246,7 @@ async fn main() -> Result<(), ServerError> {
     .enable_plugin_log(cli.log_stat || cli.log_all)
     .build();
 
-    let embedding_model_info = Model {
+    let embedding_model_info = ModelConfig {
         name: embedding_metadata.model_name.clone(),
         ty: "embedding".to_string(),
         prompt_template: embedding_metadata.prompt_template,
@@ -266,10 +261,16 @@ async fn main() -> Result<(), ServerError> {
         presence_penalty: embedding_metadata.presence_penalty,
         frequency_penalty: embedding_metadata.frequency_penalty,
     };
-    server_info.models.push(embedding_model_info);
 
     // embedding model
     let embedding_models = [embedding_metadata];
+
+    // create rag config
+    let rag_config = RagConfig {
+        chat_model: chat_model_info,
+        embedding_model: embedding_model_info,
+        policy: cli.policy,
+    };
 
     // initialize the core context
     llama_core::init_rag_core_context(&chat_models[..], &embedding_models[..]).map_err(|e| {
@@ -279,15 +280,12 @@ async fn main() -> Result<(), ServerError> {
     // get the plugin version info
     let plugin_info =
         llama_core::get_plugin_info().map_err(|e| ServerError::Operation(e.to_string()))?;
-    server_info.plugin_version = format!(
+    let plugin_version = format!(
         "b{build_number} (commit {commit_id})",
         build_number = plugin_info.build_number,
         commit_id = plugin_info.commit_id,
     );
-    log(format!(
-        "[INFO] Wasi-nn-ggml plugin: {}",
-        &server_info.plugin_version
-    ));
+    log(format!("[INFO] Wasi-nn-ggml plugin: {}", &plugin_version));
 
     // socket address
     let addr = cli
@@ -296,8 +294,16 @@ async fn main() -> Result<(), ServerError> {
         .map_err(|e| ServerError::SocketAddr(e.to_string()))?;
 
     // set the server info
-    server_info.port = addr.port().to_string();
+    let port = addr.port().to_string();
 
+    // create server info
+    let server_info = ServerInfo {
+        version: server_version,
+        plugin_version,
+        port,
+        rag_config,
+        qdrant_config,
+    };
     SERVER_INFO
         .set(server_info)
         .map_err(|_| ServerError::Operation("Failed to set `SERVER_INFO`.".to_string()))?;
@@ -378,7 +384,7 @@ pub(crate) struct QdrantConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Model {
+pub(crate) struct ModelConfig {
     // model name
     name: String,
     // type: chat or embedding
@@ -398,11 +404,19 @@ pub(crate) struct Model {
     pub frequency_penalty: f64,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct ServerInfo {
     version: String,
     plugin_version: String,
     port: String,
-    models: Vec<Model>,
+    // models: Vec<ModelConfig>,
+    rag_config: RagConfig,
     qdrant_config: QdrantConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct RagConfig {
+    pub chat_model: ModelConfig,
+    pub embedding_model: ModelConfig,
+    pub policy: MergeRagContextPolicy,
 }

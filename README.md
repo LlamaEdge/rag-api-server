@@ -14,6 +14,7 @@
       - [`/v1/embeddings` endpoint](#v1embeddings-endpoint)
       - [`/v1/create/rag` endpoint](#v1createrag-endpoint)
       - [`/v1/info` endpoint](#v1info-endpoint)
+      - [`/v1/retrieve` endpoint](#v1retrieve-endpoint)
   - [Setup](#setup)
   - [Build](#build)
   - [Execute](#execute)
@@ -64,9 +65,9 @@ Ask a question using OpenAI's JSON message format.
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
--H 'accept:application/json' \
--H 'Content-Type: application/json' \
--d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "Who is Robert Oppenheimer?"}], "model":"llama-2-chat"}'
+    -H 'accept:application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "Who is Robert Oppenheimer?"}], "model":"llama-2-chat"}'
 ```
 
 Here is the response.
@@ -339,6 +340,55 @@ If the command runs successfully, you should see the similar output as below in 
 
 </details>
 
+#### `/v1/retrieve` endpoint
+
+`/v1/retrieve` endpoint sends a query and gets the retrievalresults.
+
+<details> <summary> Example </summary>
+
+You can use `curl` to test it on a new terminal:
+
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+    -H 'accept:application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "What is the location of Paris, France along the Seine River?"}], "model":"llama-2-chat"}'
+```
+
+If the command runs successfully, you should see the similar output as below in your terminal:
+
+```json
+{
+    "points": [
+        {
+            "source": "\"Paris is located in northern central France, in a north-bending arc of the river Seine whose crest includes two islands, the Île Saint-Louis and the larger Île de la Cité, which form the oldest part of the city. The river's mouth on the English Channel is about 233 mi downstream from the city. The city is spread widely on both banks of the river. Overall, the city is relatively flat, and the lowest point is 35 m above sea level. Paris has several prominent hills, the highest of which is Montmartre at 130 m.\\n\"",
+            "score": 0.74011195
+        },
+        {
+            "source": "\"The Paris region is the most active water transport area in France, with most of the cargo handled by Ports of Paris in facilities located around Paris. The rivers Loire, Rhine, Rhône, Me\\n\"",
+            "score": 0.63990676
+        },
+        {
+            "source": "\"Paris\\nCountry\\tFrance\\nRegion\\nÎle-de-France\\r\\nDepartment\\nParis\\nIntercommunality\\nMétropole du Grand Paris\\nSubdivisions\\n20 arrondissements\\nGovernment\\n • Mayor (2020–2026)\\tAnne Hidalgo (PS)\\r\\nArea\\n1\\t105.4 km2 (40.7 sq mi)\\n • Urban\\n (2020)\\t2,853.5 km2 (1,101.7 sq mi)\\n • Metro\\n (2020)\\t18,940.7 km2 (7,313.0 sq mi)\\nPopulation\\n (2023)\\n2,102,650\\n • Rank\\t9th in Europe\\n1st in France\\r\\n • Density\\t20,000/km2 (52,000/sq mi)\\n • Urban\\n (2019)\\n10,858,852\\n • Urban density\\t3,800/km2 (9,900/sq mi)\\n • Metro\\n (Jan. 2017)\\n13,024,518\\n • Metro density\\t690/km2 (1,800/sq mi)\\nDemonym(s)\\nParisian(s) (en) Parisien(s) (masc.), Parisienne(s) (fem.) (fr), Parigot(s) (masc.), \\\"Parigote(s)\\\" (fem.) (fr, colloquial)\\nTime zone\\nUTC+01:00 (CET)\\r\\n • Summer (DST)\\nUTC+02:00 (CEST)\\r\\nINSEE/Postal code\\t75056 /75001-75020, 75116\\r\\nElevation\\t28–131 m (92–430 ft)\\n(avg. 78 m or 256 ft)\\nWebsite\\twww.paris.fr\\r\\n1 French Land Register data, which excludes lakes, ponds, glaciers > 1 km2 (0.386 sq mi or 247 acres) and river estuaries.\\n\"",
+            "score": 0.62259054
+        },
+        {
+            "source": "\" in Paris\\n\"",
+            "score": 0.6152092
+        },
+        {
+            "source": "\"The Parisii, a sub-tribe of the Celtic Senones, inhabited the Paris area from around the middle of the 3rd century BC. One of the area's major north–south trade routes crossed the Seine on the île de la Cité, which gradually became an important trading centre. The Parisii traded with many river towns (some as far away as the Iberian Peninsula) and minted their own coins.\\n\"",
+            "score": 0.5720232
+        }
+    ],
+    "limit": 5,
+    "score_threshold": 0.4
+}
+```
+
+</details>
+
+
 ## Setup
 
 Llama-RAG API server runs on WasmEdge Runtime. According to the operating system you are using, choose the installation command:
@@ -408,6 +458,8 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
   ```bash
   $ wasmedge rag-api-server.wasm -h
 
+  LlamaEdge-RAG API Server
+
   Usage: rag-api-server.wasm [OPTIONS] --model-name <MODEL_NAME> --prompt-template <PROMPT_TEMPLATE>
 
   Options:
@@ -418,19 +470,21 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
     -c, --ctx-size <CTX_SIZE>
             Sets context sizes for chat and embedding models. The sizes are separated by comma without space, for example, '--ctx-size 4096,384'. The first value is for the chat model, and the second is for the embedding model [default: 4096,384]
     -p, --prompt-template <PROMPT_TEMPLATE>
-            Prompt template [possible values: llama-2-chat, mistral-instruct, mistrallite, openchat, codellama-instruct, codellama-super-instruct, human-assistant, vicuna-1.0-chat, vicuna-1.1-chat, vicuna-llava, chatml, baichuan-2, wizard-coder, zephyr, stablelm-zephyr, intel-neural, deepseek-chat, deepseek-coder, solar-instruct, phi-2-chat, phi-2-instruct, gemma-instruct]
+            Prompt template [possible values: llama-2-chat, llama-3-chat, mistral-instruct, mistrallite, openchat, codellama-instruct, codellama-super-instruct, human-assistant, vicuna-1.0-chat, vicuna-1.1-chat, vicuna-llava, chatml, baichuan-2, wizard-coder, zephyr, stablelm-zephyr, intel-neural, deepseek-chat, deepseek-coder, solar-instruct, phi-2-chat, phi-2-instruct, phi-3-chat, phi-3-instruct, gemma-instruct, octopus]
     -r, --reverse-prompt <REVERSE_PROMPT>
             Halt generation at PROMPT, return control
     -b, --batch-size <BATCH_SIZE>
             Batch size for prompt processing [default: 512]
         --rag-prompt <RAG_PROMPT>
             Custom rag prompt
+        --rag-policy <POLICY>
+            Strategy for merging RAG context into chat messages [default: system-message] [possible values: system-message, last-user-message]
         --qdrant-url <QDRANT_URL>
             URL of Qdrant REST Service [default: http://localhost:6333]
         --qdrant-collection-name <QDRANT_COLLECTION_NAME>
             Name of Qdrant collection [default: default]
         --qdrant-limit <QDRANT_LIMIT>
-            Max number of retrieved result [default: 3]
+            Max number of retrieved result (no less than 1) [default: 5]
         --qdrant-score-threshold <QDRANT_SCORE_THRESHOLD>
             Minimal score threshold for the search result [default: 0.4]
         --chunk-capacity <CHUNK_CAPACITY>
@@ -446,7 +500,7 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
         --web-ui <WEB_UI>
             Root path for the Web UI files [default: chatbot-ui]
     -h, --help
-            Print help
+            Print help (see more with '--help')
     -V, --version
             Print version
   ```
