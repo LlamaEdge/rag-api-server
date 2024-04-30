@@ -494,7 +494,7 @@ impl MergeRagContext for RagPromptBuilder {
                         if let ChatCompletionUserMessageContent::Text(content) = message.content() {
                             // compose new user message content
                             let content = format!(
-                                    "{context}\n\nBased on the pieces of context above, answer the question below:\n{user_message}",
+                                    "{context}\nAnswer the question based on the pieces of context above. The question is:\n{user_message}",
                                     context = context.trim_end(),
                                     user_message = content.trim(),
                                 );
