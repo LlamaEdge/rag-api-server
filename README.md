@@ -527,3 +527,5 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
       --log-prompts \
       --log-stat
   ```
+
+Make sure you have a running instance of [Qdrant DB](https://qdrant.tech) on port `6333` and have uploaded the [paris.txt](https://huggingface.co/datasets/gaianet/paris/raw/main/paris.txt) to the API server using `/v1/files` endpoint.
