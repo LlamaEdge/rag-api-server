@@ -280,7 +280,7 @@ pub(crate) async fn rag_query_handler(
                     // create a embedding request
                     let embedding_request = EmbeddingRequest {
                         model: embedding_model_names[0].clone(),
-                        input: vec![query_text.clone()],
+                        input: query_text.into(),
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
@@ -946,7 +946,7 @@ pub(crate) async fn doc_to_embeddings(
         // create an embedding request
         let embedding_request = EmbeddingRequest {
             model,
-            input: chunks,
+            input: chunks.into(),
             encoding_format: None,
             user: None,
         };
@@ -1098,7 +1098,7 @@ pub(crate) async fn retrieve_handler(
                     // create a embedding request
                     let embedding_request = EmbeddingRequest {
                         model: embedding_model_names[0].clone(),
-                        input: vec![query_text.clone()],
+                        input: query_text.into(),
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
