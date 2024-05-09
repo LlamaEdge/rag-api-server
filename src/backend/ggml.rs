@@ -109,6 +109,46 @@ async fn chat_completions(
     }
 }
 
+/// Compute embeddings for the input text and return the embeddings object.
+pub(crate) async fn embeddings_handler(
+    mut req: Request<Body>,
+) -> Result<Response<Body>, hyper::Error> {
+    // parse request
+    let body_bytes = to_bytes(req.body_mut()).await?;
+    let embedding_request: EmbeddingRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(embedding_request) => embedding_request,
+        Err(e) => {
+            return error::bad_request(format!("Fail to parse embedding request: {msg}", msg = e));
+        }
+    };
+
+    println!("\n[+] Running embeddings handler ...");
+    match llama_core::embeddings::embeddings(&embedding_request).await {
+        Ok(embedding_response) => {
+            // serialize embedding object
+            match serde_json::to_string(&embedding_response) {
+                Ok(s) => {
+                    // return response
+                    let result = Response::builder()
+                        .header("Access-Control-Allow-Origin", "*")
+                        .header("Access-Control-Allow-Methods", "*")
+                        .header("Access-Control-Allow-Headers", "*")
+                        .body(Body::from(s));
+                    match result {
+                        Ok(response) => Ok(response),
+                        Err(e) => error::internal_server_error(e.to_string()),
+                    }
+                }
+                Err(e) => error::internal_server_error(format!(
+                    "Fail to serialize embedding object. {}",
+                    e
+                )),
+            }
+        }
+        Err(e) => error::internal_server_error(e.to_string()),
+    }
+}
+
 /// Compute embeddings for document chunks and persist them in the specified Qdrant server.
 ///
 /// Note that the body of the request is deserialized to a `RagEmbeddingRequest` instance.
@@ -153,7 +193,7 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
 /// Compute embeddings for document chunks and persist them in the specified Qdrant server.
 ///
 /// Note tht the body of the request is deserialized to a `EmbeddingRequest` instance.
-pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
+pub(crate) async fn _rag_doc_chunks_to_embeddings2_handler(
     mut req: Request<Body>,
 ) -> Result<Response<Body>, hyper::Error> {
     print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
