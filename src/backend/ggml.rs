@@ -43,6 +43,7 @@ pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "*")
         .header("Access-Control-Allow-Headers", "*")
+        .header("Content-Type", "application/json")
         .body(Body::from(s));
     match result {
         Ok(response) => Ok(response),
@@ -98,6 +99,7 @@ async fn chat_completions(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
                 .body(Body::from(s));
 
             match result {
@@ -133,6 +135,7 @@ pub(crate) async fn embeddings_handler(
                         .header("Access-Control-Allow-Origin", "*")
                         .header("Access-Control-Allow-Methods", "*")
                         .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
                         .body(Body::from(s));
                     match result {
                         Ok(response) => Ok(response),
@@ -174,6 +177,7 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
                         .header("Access-Control-Allow-Origin", "*")
                         .header("Access-Control-Allow-Methods", "*")
                         .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
                         .body(Body::from(s));
                     match result {
                         Ok(response) => Ok(response),
@@ -237,6 +241,7 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings2_handler(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
                 .body(Body::from(s));
             match result {
                 Ok(response) => Ok(response),
@@ -262,6 +267,7 @@ pub(crate) async fn rag_query_handler(
             .header("Access-Control-Allow-Origin", "*")
             .header("Access-Control-Allow-Methods", "*")
             .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
             .body(Body::empty());
 
         match result {
@@ -678,6 +684,7 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                     .header("Access-Control-Allow-Origin", "*")
                     .header("Access-Control-Allow-Methods", "*")
                     .header("Access-Control-Allow-Headers", "*")
+                    .header("Content-Type", "application/json")
                     .body(Body::from(s));
 
                 match result {
@@ -785,6 +792,7 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
                         .header("Access-Control-Allow-Origin", "*")
                         .header("Access-Control-Allow-Methods", "*")
                         .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
                         .body(Body::from(s));
                     match result {
                         Ok(response) => Ok(response),
@@ -1031,6 +1039,7 @@ pub(crate) async fn doc_to_embeddings(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
                 .body(Body::from(s));
             match result {
                 Ok(response) => Ok(response),
@@ -1065,6 +1074,7 @@ pub(crate) async fn server_info() -> Result<Response<Body>, hyper::Error> {
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "*")
         .header("Access-Control-Allow-Headers", "*")
+        .header("Content-Type", "application/json")
         .body(Body::from(s));
     match result {
         Ok(response) => Ok(response),
@@ -1080,6 +1090,7 @@ pub(crate) async fn retrieve_handler(
             .header("Access-Control-Allow-Origin", "*")
             .header("Access-Control-Allow-Methods", "*")
             .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
             .body(Body::empty());
 
         match result {
@@ -1203,6 +1214,7 @@ pub(crate) async fn retrieve_handler(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
                 .body(Body::from(s));
 
             match result {
