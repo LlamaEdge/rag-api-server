@@ -349,7 +349,7 @@ If the command runs successfully, you should see the similar output as below in 
 You can use `curl` to test it on a new terminal:
 
 ```bash
-curl -X POST http://localhost:8080/v1/chat/completions \
+curl -X POST http://localhost:8080/v1/retrieve \
     -H 'accept:application/json' \
     -H 'Content-Type: application/json' \
     -d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "What is the location of Paris, France along the Seine River?"}], "model":"llama-2-chat"}'
@@ -511,7 +511,22 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
 
 LlamaEdge-RAG API server requires two types of models: chat and embedding. The chat model is used for generating responses to user queries, while the embedding model is used for computing embeddings for user queries or file chunks.
 
-For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](https://huggingface.co/second-state/Llama-2-7B-Chat-GGUF/resolve/main/Llama-2-7b-chat-hf-Q5_K_M.gguf) and [all-MiniLM-L6-v2-ggml-model-f16.gguf](https://huggingface.co/second-state/All-MiniLM-L6-v2-Embedding-GGUF/resolve/main/all-MiniLM-L6-v2-ggml-model-f16.gguf) models as examples.
+Execution also requires the presence of a running [Qdrant](https://qdrant.tech/) service.
+
+For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](https://huggingface.co/second-state/Llama-2-7B-Chat-GGUF/resolve/main/Llama-2-7b-chat-hf-Q5_K_M.gguf) and [all-MiniLM-L6-v2-ggml-model-f16.gguf](https://huggingface.co/second-state/All-MiniLM-L6-v2-Embedding-GGUF/resolve/main/all-MiniLM-L6-v2-ggml-model-f16.gguf) models as examples. Download these models and place them in the root directory of the repository.
+
+- Ensure the Qdrant service is running
+
+    ```bash
+    # Pull the Qdrant docker image
+    docker pull qdrant/qdrant
+
+    # Create a directory to store Qdrant data
+    mkdir qdrant_storage
+
+    # Run Qdrant service
+    docker run -p 6333:6333 -p 6334:6334 -v /home/nsen/llamaedge/rag-api-server/qdrant_storage:/qdrant/storage:z qdrant/qdrant
+    ```
 
 - Start an instance of LlamaEdge-RAG API server
 
@@ -527,3 +542,22 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
       --log-prompts \
       --log-stat
   ```
+
+## Usage Example
+
+- [Execute](#execute) the server
+
+- Generate embeddings for [paris.txt](https://huggingface.co/datasets/gaianet/paris/raw/main/paris.txt) via the `/v1/create/rag` endpoint
+
+    ```bash
+    curl -X POST http://127.0.0.1:8080/v1/create/rag -F "file=@paris.txt"
+    ```
+
+- Ask a question
+
+    ```bash
+    curl -X POST http://localhost:8080/v1/chat/completions \
+        -H 'accept:application/json' \
+        -H 'Content-Type: application/json' \
+        -d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "What is the location of Paris, France along the Seine River?"}], "model":"Llama-2-7b-chat-hf-Q5_K_M"}'
+    ```
