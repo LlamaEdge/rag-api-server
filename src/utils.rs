@@ -1,4 +1,5 @@
 use url::Url;
+use hyper::{body::HttpBody as _, Client, Uri};
 
 pub(crate) fn print_log_begin_separator(
     title: impl AsRef<str>,
@@ -30,6 +31,16 @@ pub(crate) fn print_log_end_separator(ch: Option<&str>, len: Option<usize>) {
 
 pub(crate) fn is_valid_url(url: &str) -> bool {
     Url::parse(url).is_ok()
+}
+
+//TODO: check json title field to check whether running service is really qdrant
+pub(crate) async fn qdrant_up(url: &str) -> bool {
+    let client = Client::new();   
+
+    match client.get(url.parse().unwrap()).await {
+        Ok(res) => res.status().is_success(),
+        Err(_) => false
+    }   
 }
 
 pub(crate) fn log(msg: impl std::fmt::Display) {

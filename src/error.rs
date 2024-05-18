@@ -51,4 +51,6 @@ pub enum ServerError {
     ArgumentError(String),
     #[error("{0}")]
     Operation(String),
+    #[error("{0}")]
+    NoDatabaseError(String),
 }

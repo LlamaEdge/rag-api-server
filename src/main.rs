@@ -15,7 +15,7 @@ use llama_core::MetadataBuilder;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::PathBuf};
-use utils::{is_valid_url, log};
+use utils::{is_valid_url, log, qdrant_up};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
@@ -158,14 +158,22 @@ async fn main() -> Result<(), ServerError> {
             ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
         })?;
     }
-
+    
     if !is_valid_url(&cli.qdrant_url) {
         return Err(ServerError::ArgumentError(format!(
             "The URL of Qdrant REST API is invalid: {}.",
             &cli.qdrant_url
         )));
     }
-    log(format!("[INFO] Qdrant server url: {}", &cli.qdrant_url));
+    
+    //TODO: add more verbosity
+    if !qdrant_up(&cli.qdrant_url).await {
+        log(format!("[INFO] Qdrant not found at: {}", &cli.qdrant_url));
+        return Err(ServerError::NoDatabaseError(format!("Qdrant not found at: {}", &cli.qdrant_url)));
+    }
+    
+    log(format!("[INFO] Qdrant found at: {}", &cli.qdrant_url));
+
     log(format!(
         "[INFO] Qdrant collection name: {}",
         &cli.qdrant_collection_name
