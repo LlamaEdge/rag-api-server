@@ -10,7 +10,7 @@ pub(crate) async fn handle_llama_request(
     match req.uri().path() {
         "/v1/chat/completions" => ggml::rag_query_handler(req).await,
         "/v1/models" => ggml::models_handler().await,
-        "/v1/embeddings" => ggml::rag_doc_chunks_to_embeddings2_handler(req).await,
+        "/v1/embeddings" => ggml::embeddings_handler(req).await,
         "/v1/files" => ggml::files_handler(req).await,
         "/v1/chunks" => ggml::chunks_handler(req).await,
         "/v1/retrieve" => ggml::retrieve_handler(req).await,

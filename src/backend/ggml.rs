@@ -1,6 +1,6 @@
 use crate::{
     error,
-    utils::{print_log_begin_separator, print_log_end_separator},
+    utils::{gen_chat_id, print_log_begin_separator, print_log_end_separator},
     GLOBAL_RAG_PROMPT, SERVER_INFO,
 };
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
@@ -43,6 +43,7 @@ pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "*")
         .header("Access-Control-Allow-Headers", "*")
+        .header("Content-Type", "application/json")
         .body(Body::from(s));
     match result {
         Ok(response) => Ok(response),
@@ -54,6 +55,11 @@ pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
 async fn chat_completions_stream(
     mut chat_request: ChatCompletionRequest,
 ) -> Result<Response<Body>, hyper::Error> {
+    if chat_request.user.is_none() {
+        chat_request.user = Some(gen_chat_id())
+    };
+    let id = chat_request.user.clone().unwrap();
+
     match llama_core::chat::chat_completions_stream(&mut chat_request).await {
         Ok(stream) => {
             let stream = stream.map_err(|e| e.to_string());
@@ -65,6 +71,7 @@ async fn chat_completions_stream(
                 .header("Content-Type", "text/event-stream")
                 .header("Cache-Control", "no-cache")
                 .header("Connection", "keep-alive")
+                .header("user", id)
                 .body(Body::wrap_stream(stream));
 
             match result {
@@ -80,6 +87,11 @@ async fn chat_completions_stream(
 async fn chat_completions(
     mut chat_request: ChatCompletionRequest,
 ) -> Result<Response<Body>, hyper::Error> {
+    if chat_request.user.is_none() {
+        chat_request.user = Some(gen_chat_id())
+    };
+    let id = chat_request.user.clone().unwrap();
+
     match llama_core::chat::chat_completions(&mut chat_request).await {
         Ok(chat_completion_object) => {
             // serialize chat completion object
@@ -98,11 +110,60 @@ async fn chat_completions(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
+                .header("user", id)
                 .body(Body::from(s));
 
             match result {
                 Ok(response) => Ok(response),
                 Err(e) => error::internal_server_error(e.to_string()),
+            }
+        }
+        Err(e) => error::internal_server_error(e.to_string()),
+    }
+}
+
+/// Compute embeddings for the input text and return the embeddings object.
+pub(crate) async fn embeddings_handler(
+    mut req: Request<Body>,
+) -> Result<Response<Body>, hyper::Error> {
+    // parse request
+    let body_bytes = to_bytes(req.body_mut()).await?;
+    let mut embedding_request: EmbeddingRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(embedding_request) => embedding_request,
+        Err(e) => {
+            return error::bad_request(format!("Fail to parse embedding request: {msg}", msg = e));
+        }
+    };
+
+    if embedding_request.user.is_none() {
+        embedding_request.user = Some(gen_chat_id())
+    };
+    let id = embedding_request.user.clone().unwrap();
+
+    println!("\n[+] Running embeddings handler ...");
+    match llama_core::embeddings::embeddings(&embedding_request).await {
+        Ok(embedding_response) => {
+            // serialize embedding object
+            match serde_json::to_string(&embedding_response) {
+                Ok(s) => {
+                    // return response
+                    let result = Response::builder()
+                        .header("Access-Control-Allow-Origin", "*")
+                        .header("Access-Control-Allow-Methods", "*")
+                        .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
+                        .header("user", id)
+                        .body(Body::from(s));
+                    match result {
+                        Ok(response) => Ok(response),
+                        Err(e) => error::internal_server_error(e.to_string()),
+                    }
+                }
+                Err(e) => error::internal_server_error(format!(
+                    "Fail to serialize embedding object. {}",
+                    e
+                )),
             }
         }
         Err(e) => error::internal_server_error(e.to_string()),
@@ -134,6 +195,7 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
                         .header("Access-Control-Allow-Origin", "*")
                         .header("Access-Control-Allow-Methods", "*")
                         .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
                         .body(Body::from(s));
                     match result {
                         Ok(response) => Ok(response),
@@ -153,7 +215,7 @@ pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
 /// Compute embeddings for document chunks and persist them in the specified Qdrant server.
 ///
 /// Note tht the body of the request is deserialized to a `EmbeddingRequest` instance.
-pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
+pub(crate) async fn _rag_doc_chunks_to_embeddings2_handler(
     mut req: Request<Body>,
 ) -> Result<Response<Body>, hyper::Error> {
     print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
@@ -197,6 +259,7 @@ pub(crate) async fn rag_doc_chunks_to_embeddings2_handler(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
                 .body(Body::from(s));
             match result {
                 Ok(response) => Ok(response),
@@ -222,6 +285,7 @@ pub(crate) async fn rag_query_handler(
             .header("Access-Control-Allow-Origin", "*")
             .header("Access-Control-Allow-Methods", "*")
             .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
             .body(Body::empty());
 
         match result {
@@ -242,6 +306,10 @@ pub(crate) async fn rag_query_handler(
                 msg = e
             ));
         }
+    };
+
+    if chat_request.user.is_none() {
+        chat_request.user = Some(gen_chat_id())
     };
 
     let server_info = match SERVER_INFO.get() {
@@ -280,7 +348,7 @@ pub(crate) async fn rag_query_handler(
                     // create a embedding request
                     let embedding_request = EmbeddingRequest {
                         model: embedding_model_names[0].clone(),
-                        input: vec![query_text.clone()],
+                        input: query_text.into(),
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
@@ -638,6 +706,7 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                     .header("Access-Control-Allow-Origin", "*")
                     .header("Access-Control-Allow-Methods", "*")
                     .header("Access-Control-Allow-Headers", "*")
+                    .header("Content-Type", "application/json")
                     .body(Body::from(s));
 
                 match result {
@@ -745,6 +814,7 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
                         .header("Access-Control-Allow-Origin", "*")
                         .header("Access-Control-Allow-Methods", "*")
                         .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
                         .body(Body::from(s));
                     match result {
                         Ok(response) => Ok(response),
@@ -946,7 +1016,7 @@ pub(crate) async fn doc_to_embeddings(
         // create an embedding request
         let embedding_request = EmbeddingRequest {
             model,
-            input: chunks,
+            input: chunks.into(),
             encoding_format: None,
             user: None,
         };
@@ -991,6 +1061,7 @@ pub(crate) async fn doc_to_embeddings(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
                 .body(Body::from(s));
             match result {
                 Ok(response) => Ok(response),
@@ -1025,6 +1096,7 @@ pub(crate) async fn server_info() -> Result<Response<Body>, hyper::Error> {
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "*")
         .header("Access-Control-Allow-Headers", "*")
+        .header("Content-Type", "application/json")
         .body(Body::from(s));
     match result {
         Ok(response) => Ok(response),
@@ -1040,6 +1112,7 @@ pub(crate) async fn retrieve_handler(
             .header("Access-Control-Allow-Origin", "*")
             .header("Access-Control-Allow-Methods", "*")
             .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
             .body(Body::empty());
 
         match result {
@@ -1052,7 +1125,7 @@ pub(crate) async fn retrieve_handler(
 
     // parse request
     let body_bytes = to_bytes(req.body_mut()).await?;
-    let chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
+    let mut chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
         Ok(chat_request) => chat_request,
         Err(e) => {
             return error::bad_request(format!(
@@ -1061,6 +1134,11 @@ pub(crate) async fn retrieve_handler(
             ));
         }
     };
+
+    if chat_request.user.is_none() {
+        chat_request.user = Some(gen_chat_id())
+    };
+    let id = chat_request.user.clone().unwrap();
 
     let server_info = match SERVER_INFO.get() {
         Some(server_info) => server_info,
@@ -1098,7 +1176,7 @@ pub(crate) async fn retrieve_handler(
                     // create a embedding request
                     let embedding_request = EmbeddingRequest {
                         model: embedding_model_names[0].clone(),
-                        input: vec![query_text.clone()],
+                        input: query_text.into(),
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
@@ -1163,6 +1241,8 @@ pub(crate) async fn retrieve_handler(
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "*")
                 .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
+                .header("user", id)
                 .body(Body::from(s));
 
             match result {
