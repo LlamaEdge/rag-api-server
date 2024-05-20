@@ -1,5 +1,5 @@
-use url::Url;
 use hyper::Client;
+use url::Url;
 
 pub(crate) fn print_log_begin_separator(
     title: impl AsRef<str>,
@@ -35,12 +35,12 @@ pub(crate) fn is_valid_url(url: &str) -> bool {
 
 //TODO: check json title field to check whether running service is really qdrant
 pub(crate) async fn qdrant_up(url: &str) -> bool {
-    let client = Client::new();   
+    let client = Client::new();
 
     match client.get(url.parse().unwrap()).await {
         Ok(res) => res.status().is_success(),
         Err(_) => false
-    }   
+    }
 }
 
 pub(crate) fn log(msg: impl std::fmt::Display) {
