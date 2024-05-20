@@ -39,7 +39,7 @@ pub(crate) async fn qdrant_up(url: &str) -> bool {
 
     match client.get(url.parse().unwrap()).await {
         Ok(res) => res.status().is_success(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
