@@ -1,5 +1,5 @@
 use url::Url;
-use hyper::{body::HttpBody as _, Client, Uri};
+use hyper::Client;
 
 pub(crate) fn print_log_begin_separator(
     title: impl AsRef<str>,
