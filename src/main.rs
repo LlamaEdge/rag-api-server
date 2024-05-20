@@ -192,7 +192,10 @@ async fn main() -> Result<(), ServerError> {
     //TODO: add more verbosity
     if !qdrant_up(&cli.qdrant_url).await {
         log(format!("[INFO] Qdrant not found at: {}", &cli.qdrant_url));
-        return Err(ServerError::NoDatabaseError(format!("Qdrant not found at: {}", &cli.qdrant_url)));
+        return Err(ServerError::NoDatabaseError(format!(
+            "Qdrant not found at: {}",
+            &cli.qdrant_url
+        )));
     }
     
     log(format!("[INFO] Qdrant found at: {}", &cli.qdrant_url));
