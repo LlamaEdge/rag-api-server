@@ -181,14 +181,14 @@ async fn main() -> Result<(), ServerError> {
             ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
         })?;
     }
-    
+
     if !is_valid_url(&cli.qdrant_url) {
         return Err(ServerError::ArgumentError(format!(
             "The URL of Qdrant REST API is invalid: {}.",
             &cli.qdrant_url
         )));
     }
-    
+
     //TODO: add more verbosity
     if !qdrant_up(&cli.qdrant_url).await {
         log(format!("[INFO] Qdrant not found at: {}", &cli.qdrant_url));
@@ -197,7 +197,7 @@ async fn main() -> Result<(), ServerError> {
             &cli.qdrant_url
         )));
     }
-    
+
     log(format!("[INFO] Qdrant found at: {}", &cli.qdrant_url));
 
     log(format!(
