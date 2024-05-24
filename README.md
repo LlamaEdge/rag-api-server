@@ -528,7 +528,7 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
     mkdir qdrant_storage
 
     # Run Qdrant service
-    docker run -p 6333:6333 -p 6334:6334 -v /home/nsen/llamaedge/rag-api-server/qdrant_storage:/qdrant/storage:z qdrant/qdrant
+    docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant
     ```
 
 - Start an instance of LlamaEdge-RAG API server
