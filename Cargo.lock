@@ -311,9 +311,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dc1c74be8bfa3a25f6bee8a619da567c5ee8053b62be1a0fa89fcc0dc7dd63d"
+checksum = "4eb609ea4fdde67b1e663f1280cefe13396d24d4b34ef0590fc7a96910d58189"
 dependencies = [
  "base64 0.22.0",
  "clap",
@@ -1091,9 +1091,9 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
 name = "llama-core"
-version = "0.10.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c0a61368e9e17cae08093ddcb8635d3139bced30860068f0f50155305576247"
+checksum = "fa38b531a6272e8ced627aa9d4236d21b0166619d9f922e6882dfe0885f6edc3"
 dependencies = [
  "chat-prompts",
  "endpoints",
@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "rag-api-server"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "chat-prompts",

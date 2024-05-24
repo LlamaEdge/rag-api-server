@@ -1,15 +1,15 @@
 [package]
 name = "rag-api-server"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 
 [dependencies]
-llama-core = { version = "=0.10.1" }
+llama-core = { version = "=0.11.0" }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 endpoints = { version = "=0.8.0" }
-chat-prompts = { version = "=0.7.1" }
+chat-prompts = { version = "=0.8.0" }
 serde_yaml = "0.9"
 hyper_wasi = { version = "0.15", features = ["full"] }
 tokio_wasi = { version = "1", features = ["full"] }
