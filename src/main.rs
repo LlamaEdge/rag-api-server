@@ -55,9 +55,9 @@ struct Cli {
         value_parser = clap::value_parser!(u64)
     )]
     ctx_size: Vec<u64>,
-    /// Prompt template.
-    #[arg(short, long, value_parser = clap::value_parser!(PromptTemplateType), required = true)]
-    prompt_template: PromptTemplateType,
+    /// Sets prompt templates for chat and embedding models, respectively. The prompt templates are separated by comma without space, for example, '--prompt-template llama-2-chat,embedding'. The first value is for the chat model, and the second is for the embedding model.
+    #[arg(short, long, value_delimiter = ',', value_parser = clap::value_parser!(PromptTemplateType), required = true)]
+    prompt_template: Vec<PromptTemplateType>,
     /// Halt generation at PROMPT, return control.
     #[arg(short, long)]
     reverse_prompt: Option<String>,
@@ -170,7 +170,19 @@ async fn main() -> Result<(), ServerError> {
         "[INFO] Batch sizes: {batch_sizes}",
         batch_sizes = batch_sizes_str
     ));
-    log(format!("[INFO] Prompt template: {}", &cli.prompt_template));
+    if cli.prompt_template.len() != 2 {
+        return Err(ServerError::ArgumentError(
+            "LlamaEdge RAG API server requires two prompt templates: one for chat model, one for embedding model.".to_owned(),
+        ));
+    }
+    let prompt_template_str: String = cli
+        .prompt_template
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    log(format!("[INFO] Prompt template: {prompt_template_str}"));
+
     if let Some(reverse_prompt) = &cli.reverse_prompt {
         log(format!("[INFO] reverse prompt: {}", reverse_prompt));
     }
@@ -219,7 +231,8 @@ async fn main() -> Result<(), ServerError> {
     // RAG policy
     let mut policy = cli.policy;
     log(format!("[INFO] RAG policy: {}", policy));
-    if policy == MergeRagContextPolicy::SystemMessage && !cli.prompt_template.has_system_prompt() {
+    if policy == MergeRagContextPolicy::SystemMessage && !cli.prompt_template[0].has_system_prompt()
+    {
         println!("       * [WARINING] The chat model does not support system message, while the '--policy' option sets to \"{}\". Update the RAG policy to {}.", cli.policy, MergeRagContextPolicy::LastUserMessage);
         policy = MergeRagContextPolicy::LastUserMessage;
         log(format!("       * Updated RAG policy: {}", policy));
@@ -229,7 +242,7 @@ async fn main() -> Result<(), ServerError> {
     let chat_metadata = MetadataBuilder::new(
         cli.model_name[0].clone(),
         cli.model_alias[0].clone(),
-        cli.prompt_template,
+        cli.prompt_template[0],
     )
     .with_ctx_size(cli.ctx_size[0])
     .with_reverse_prompt(cli.reverse_prompt)
@@ -262,7 +275,7 @@ async fn main() -> Result<(), ServerError> {
     let embedding_metadata = MetadataBuilder::new(
         cli.model_name[1].clone(),
         cli.model_alias[1].clone(),
-        cli.prompt_template,
+        cli.prompt_template[1],
     )
     .with_ctx_size(cli.ctx_size[1])
     .with_batch_size(cli.batch_size[1])
