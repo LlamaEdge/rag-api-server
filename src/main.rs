@@ -330,7 +330,7 @@ async fn main() -> Result<(), ServerError> {
     );
 
     // log plugin version
-    error!(target: "llama_core", "plugin_ggml_version: {}", &plugin_version);
+    info!(target: "server_config", "plugin_ggml_version: {}", &plugin_version);
 
     // socket address
     let addr = cli
