@@ -18,6 +18,7 @@
   - [Setup](#setup)
   - [Build](#build)
   - [Execute](#execute)
+  - [Usage Example](#usage-example)
 
 <!-- /code_chunk_output -->
 
@@ -537,7 +538,7 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
       rag-api-server.wasm \
       --model-name Llama-2-7b-chat-hf-Q5_K_M,all-MiniLM-L6-v2-ggml-model-f16 \
       --ctx-size 4096,384 \
-      --prompt-template llama-2-chat \
+      --prompt-template llama-2-chat,embedding \
       --rag-prompt "Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n" \
       --log-prompts \
       --log-stat
