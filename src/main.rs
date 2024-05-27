@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 mod backend;
 mod error;
 mod utils;
@@ -8,14 +11,16 @@ use clap::Parser;
 use error::ServerError;
 use hyper::{
     header,
+    server::conn::AddrStream,
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server, StatusCode,
 };
 use llama_core::MetadataBuilder;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{net::SocketAddr, path::PathBuf};
-use utils::{is_valid_url, log};
+use utils::{is_valid_url, LogLevel, NewLogRecord};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
@@ -105,6 +110,16 @@ struct Cli {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), ServerError> {
     // get the environment variable `PLUGIN_DEBUG`
+    let log_level: LogLevel = std::env::var("LLAMA_DEBUG")
+        .unwrap_or("info".to_string())
+        .parse()
+        .unwrap_or(LogLevel::Info);
+
+    // set global logger
+    wasi_logger::Logger::install().expect("failed to install wasi_logger::Logger");
+    log::set_max_level(log_level.into());
+
+    // get the environment variable `PLUGIN_DEBUG`
     let plugin_debug = std::env::var("PLUGIN_DEBUG").unwrap_or_default();
     let plugin_debug = match plugin_debug.is_empty() {
         true => false,
@@ -115,31 +130,49 @@ async fn main() -> Result<(), ServerError> {
     let cli = Cli::parse();
 
     // log the version of the server
-    let server_version = env!("CARGO_PKG_VERSION").to_string();
-    log(format!(
-        "\n[INFO] LlamaEdge-RAG version: {}",
-        &server_version
-    ));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "server_version": env!("CARGO_PKG_VERSION").to_string(),
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
 
-    // log the cli options
+    // log model name
     if cli.model_name.len() != 2 {
         return Err(ServerError::ArgumentError(
             "LlamaEdge RAG API server requires a chat model and an embedding model.".to_owned(),
         ));
     }
-    log(format!(
-        "[INFO] Model names: {names}",
-        names = &cli.model_name.join(",")
-    ));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "model_name": cli.model_name.join(",").to_string(),
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log model alias
     if cli.model_alias.len() != 2 {
         return Err(ServerError::ArgumentError(
             "LlamaEdge RAG API server requires two model aliases: one for chat model, one for embedding model.".to_owned(),
         ));
     }
-    log(format!(
-        "[INFO] Model aliases: {aliases}",
-        aliases = &cli.model_alias.join(",")
-    ));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "model_alias": cli.model_alias.join(",").to_string(),
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log context size
     if cli.ctx_size.len() != 2 {
         return Err(ServerError::ArgumentError(
             "LlamaEdge RAG API server requires two context sizes: one for chat model, one for embedding model.".to_owned(),
@@ -151,10 +184,17 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    log(format!(
-        "[INFO] Context sizes: {ctx_sizes}",
-        ctx_sizes = ctx_sizes_str
-    ));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "ctx_size": ctx_sizes_str,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log batch size
     if cli.batch_size.len() != 2 {
         return Err(ServerError::ArgumentError(
             "LlamaEdge RAG API server requires two batch sizes: one for chat model, one for embedding model.".to_owned(),
@@ -166,10 +206,17 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    log(format!(
-        "[INFO] Batch sizes: {batch_sizes}",
-        batch_sizes = batch_sizes_str
-    ));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "batch_size": batch_sizes_str,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log prompt template
     if cli.prompt_template.len() != 2 {
         return Err(ServerError::ArgumentError(
             "LlamaEdge RAG API server requires two prompt templates: one for chat model, one for embedding model.".to_owned(),
@@ -181,38 +228,112 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    log(format!("[INFO] Prompt template: {prompt_template_str}"));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "prompt_template": prompt_template_str,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
 
+    // log reverse prompt
     if let Some(reverse_prompt) = &cli.reverse_prompt {
-        log(format!("[INFO] reverse prompt: {}", reverse_prompt));
+        let record = NewLogRecord::new(
+            LogLevel::Info,
+            None,
+            json!({
+                "reverse_prompt": reverse_prompt,
+            }),
+        );
+        let message = serde_json::to_string(&record).unwrap();
+        info!(target: "server_config", "{}", message);
     }
 
+    // log rag prompt
     if let Some(rag_prompt) = &cli.rag_prompt {
-        log(format!("[INFO] rag prompt: {}", rag_prompt));
+        let record = NewLogRecord::new(
+            LogLevel::Info,
+            None,
+            json!({
+                "reverse_prompt": rag_prompt,
+            }),
+        );
+        let message = serde_json::to_string(&record).unwrap();
+        info!(target: "server_config", "{}", message);
+
         GLOBAL_RAG_PROMPT.set(rag_prompt.clone()).map_err(|_| {
             ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
         })?;
     }
 
+    // log qdrant url
     if !is_valid_url(&cli.qdrant_url) {
-        return Err(ServerError::ArgumentError(format!(
+        let err_msg = format!(
             "The URL of Qdrant REST API is invalid: {}.",
             &cli.qdrant_url
-        )));
+        );
+
+        // log
+        {
+            let record = NewLogRecord::new(
+                LogLevel::Error,
+                None,
+                json!({
+                    "message": &err_msg,
+                }),
+            );
+            let message = serde_json::to_string(&record).unwrap();
+            error!(target: "models_handler", "{}", message);
+        }
+
+        return Err(ServerError::ArgumentError(err_msg));
     }
-    log(format!("[INFO] Qdrant server url: {}", &cli.qdrant_url));
-    log(format!(
-        "[INFO] Qdrant collection name: {}",
-        &cli.qdrant_collection_name
-    ));
-    log(format!(
-        "[INFO] Max number of retrieved result: {}",
-        &cli.qdrant_limit
-    ));
-    log(format!(
-        "[INFO] Qdrant score threshold: {}",
-        &cli.qdrant_score_threshold
-    ));
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "qdrant_url": &cli.qdrant_url,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log qdrant collection name
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "qdrant_collection_name": &cli.qdrant_collection_name,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log qdrant limit
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "qdrant_limit": &cli.qdrant_limit,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // log qdrant score threshold
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "qdrant_score_threshold": &cli.qdrant_score_threshold,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
+
+    // create qdrant config
     let qdrant_config = QdrantConfig {
         url: cli.qdrant_url,
         collection_name: cli.qdrant_collection_name,
@@ -220,22 +341,41 @@ async fn main() -> Result<(), ServerError> {
         score_threshold: cli.qdrant_score_threshold,
     };
 
-    log(format!(
-        "[INFO] Chunk capacity (in tokens): {}",
-        &cli.chunk_capacity
-    ));
-    log(format!("[INFO] Enable prompt log: {}", &cli.log_prompts));
-    log(format!("[INFO] Enable plugin log: {}", &cli.log_stat));
-    log(format!("[INFO] Socket address: {}", &cli.socket_addr));
+    // log chunk capacity
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "chunk_capacity": &cli.chunk_capacity,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
 
     // RAG policy
+    let record = NewLogRecord::new(
+        LogLevel::Info,
+        None,
+        json!({
+            "rag_policy": &cli.policy,
+        }),
+    );
+    let message = serde_json::to_string(&record).unwrap();
+    info!(target: "server_config", "{}", message);
     let mut policy = cli.policy;
-    log(format!("[INFO] RAG policy: {}", policy));
     if policy == MergeRagContextPolicy::SystemMessage && !cli.prompt_template[0].has_system_prompt()
     {
-        println!("       * [WARINING] The chat model does not support system message, while the '--policy' option sets to \"{}\". Update the RAG policy to {}.", cli.policy, MergeRagContextPolicy::LastUserMessage);
+        let record = NewLogRecord::new(
+            LogLevel::Info,
+            None,
+            json!({
+                "message": format!("The chat model does not support system message, while the '--policy' option sets to \"{}\". Update the RAG policy to {}.", cli.policy, MergeRagContextPolicy::LastUserMessage),
+            }),
+        );
+        let message = serde_json::to_string(&record).unwrap();
+        info!(target: "server_config", "{}", message);
+
         policy = MergeRagContextPolicy::LastUserMessage;
-        log(format!("       * Updated RAG policy: {}", policy));
     }
 
     // create metadata for chat model
@@ -307,12 +447,27 @@ async fn main() -> Result<(), ServerError> {
     let rag_config = RagConfig {
         chat_model: chat_model_info,
         embedding_model: embedding_model_info,
-        policy: cli.policy,
+        policy,
     };
 
     // initialize the core context
     llama_core::init_rag_core_context(&chat_models[..], &embedding_models[..]).map_err(|e| {
-        ServerError::Operation(format!("Failed to initialize the core context. {}", e))
+        let err_msg = format!("Failed to initialize the core context. {}", e);
+
+        // log
+        {
+            let record = NewLogRecord::new(
+                LogLevel::Error,
+                None,
+                json!({
+                    "message": &err_msg,
+                }),
+            );
+            let message = serde_json::to_string(&record).unwrap();
+            error!(target: "llama_core", "{}", message);
+        }
+
+        ServerError::Operation(err_msg)
     })?;
 
     // get the plugin version info
@@ -323,20 +478,43 @@ async fn main() -> Result<(), ServerError> {
         build_number = plugin_info.build_number,
         commit_id = plugin_info.commit_id,
     );
-    log(format!("[INFO] Wasi-nn-ggml plugin: {}", &plugin_version));
+
+    // log plugin version
+    {
+        let record = NewLogRecord::new(
+            LogLevel::Info,
+            None,
+            json!({
+                "plugin_ggml_version": &plugin_version,
+            }),
+        );
+        let message = serde_json::to_string(&record).unwrap();
+        info!(target: "server_config", "{}", message);
+    }
 
     // socket address
     let addr = cli
         .socket_addr
         .parse::<SocketAddr>()
         .map_err(|e| ServerError::SocketAddr(e.to_string()))?;
-
-    // set the server info
     let port = addr.port().to_string();
+
+    // log socket address
+    {
+        let record = NewLogRecord::new(
+            LogLevel::Info,
+            None,
+            json!({
+                "socket_address": addr.to_string(),
+            }),
+        );
+        let message = serde_json::to_string(&record).unwrap();
+        info!(target: "server_config", "{}", message);
+    }
 
     // create server info
     let server_info = ServerInfo {
-        version: server_version,
+        version: env!("CARGO_PKG_VERSION").to_string(),
         plugin_version,
         port,
         rag_config,
@@ -346,7 +524,21 @@ async fn main() -> Result<(), ServerError> {
         .set(server_info)
         .map_err(|_| ServerError::Operation("Failed to set `SERVER_INFO`.".to_string()))?;
 
-    let new_service = make_service_fn(move |_| {
+    let new_service = make_service_fn(move |conn: &AddrStream| {
+        // log socket address
+        {
+            let record = NewLogRecord::new(
+                LogLevel::Info,
+                None,
+                json!({
+                    "remote_addr": conn.remote_addr().to_string(),
+                    "local_addr": conn.local_addr().to_string(),
+                }),
+            );
+            let message = serde_json::to_string(&record).unwrap();
+            info!(target: "server_config", "{}", message);
+        }
+
         let web_ui = cli.web_ui.to_string_lossy().to_string();
         let chunk_capacity = cli.chunk_capacity;
 
@@ -357,11 +549,6 @@ async fn main() -> Result<(), ServerError> {
         }
     });
     let server = Server::bind(&addr).serve(new_service);
-    log(format!(
-        "[INFO] LlamaEdge-RAG API server listening on http://{}:{}",
-        addr.ip(),
-        addr.port()
-    ));
 
     match server.await {
         Ok(_) => Ok(()),
@@ -380,6 +567,47 @@ async fn handle_request(
     path_iter.next(); // Must be Some(OsStr::new(&path::MAIN_SEPARATOR.to_string()))
     let root_path = path_iter.next().unwrap_or_default();
     let root_path = "/".to_owned() + root_path.to_str().unwrap_or_default();
+
+    // log request
+    {
+        let method = hyper::http::Method::as_str(req.method()).to_string();
+        let path = req.uri().path().to_string();
+        let version = format!("{:?}", req.version());
+        if req.method() == hyper::http::Method::POST {
+            let size: u64 = req
+                .headers()
+                .get("content-length")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            let record = NewLogRecord::new(
+                LogLevel::Info,
+                None,
+                json!({
+                    "method": method,
+                    "endpoint": path,
+                    "http_version": version,
+                    "size": size,
+                }),
+            );
+            let message = serde_json::to_string(&record).unwrap();
+            info!(target: "request", "{}", message);
+        } else {
+            let record = NewLogRecord::new(
+                LogLevel::Info,
+                None,
+                json!({
+                    "method": method,
+                    "endpoint": path,
+                    "http_version": version,
+                }),
+            );
+            let message = serde_json::to_string(&record).unwrap();
+            info!(target: "request", "{}", message);
+        }
+    }
 
     match root_path.as_str() {
         "/echo" => Ok(Response::new(Body::from("echo test"))),
@@ -447,8 +675,9 @@ pub(crate) struct ServerInfo {
     version: String,
     plugin_version: String,
     port: String,
-    // models: Vec<ModelConfig>,
+    #[serde(flatten)]
     rag_config: RagConfig,
+    #[serde(flatten)]
     qdrant_config: QdrantConfig,
 }
 
