@@ -15,7 +15,7 @@ pub(crate) async fn handle_llama_request(
         "/v1/chunks" => ggml::chunks_handler(req).await,
         "/v1/retrieve" => ggml::retrieve_handler(req).await,
         "/v1/create/rag" => ggml::doc_to_embeddings_handler(req, chunk_capacity).await,
-        "/v1/info" => ggml::server_info().await,
+        "/v1/info" => ggml::server_info_handler().await,
         _ => error::invalid_endpoint(req.uri().path()),
     }
 }
