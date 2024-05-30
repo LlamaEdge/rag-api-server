@@ -356,7 +356,7 @@ async fn main() -> Result<(), ServerError> {
 
     let new_service = make_service_fn(move |conn: &AddrStream| {
         // log socket address
-        info!(target: "server_config", "remote_addr: {}, local_addr: {}", conn.remote_addr().to_string(), conn.local_addr().to_string());
+        info!(target: "connection", "remote_addr: {}, local_addr: {}", conn.remote_addr().to_string(), conn.local_addr().to_string());
 
         let web_ui = cli.web_ui.to_string_lossy().to_string();
         let chunk_capacity = cli.chunk_capacity;

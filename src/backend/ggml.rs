@@ -74,8 +74,7 @@ pub(crate) async fn models_handler() -> Response<Body> {
 
 /// Process a chat-completion request in stream mode and returns a chat-completion response with the answer from the model.
 async fn chat_completions_stream(mut chat_request: ChatCompletionRequest) -> Response<Body> {
-    // log
-    info!(target: "chat_completions_stream", "start chat completions in stream mode");
+    info!(target: "chat_completions_stream", "Process the chat completions in stream mode.");
 
     if chat_request.user.is_none() {
         chat_request.user = Some(gen_chat_id())
@@ -129,16 +128,12 @@ async fn chat_completions_stream(mut chat_request: ChatCompletionRequest) -> Res
 
 /// Process a chat-completion request and returns a chat-completion response with the answer from the model.
 async fn chat_completions(mut chat_request: ChatCompletionRequest) -> Response<Body> {
-    // log
-    info!(target: "chat_completions", "start chat completions in non-stream mode");
+    info!(target: "chat_completions", "Process the chat completions request in non-stream mode.");
 
     if chat_request.user.is_none() {
         chat_request.user = Some(gen_chat_id())
     };
     let id = chat_request.user.clone().unwrap();
-
-    // log user id
-    info!(target: "chat_completions", "user: {}", &id);
 
     match llama_core::chat::chat_completions(&mut chat_request).await {
         Ok(chat_completion_object) => {
@@ -354,6 +349,8 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         }
     };
 
+    info!(target: "rag_query_handler", "Compute embeddings for user query.");
+
     // * compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
         true => {
@@ -403,8 +400,6 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
-
-                    info!(target: "rag_query_handler", "Prepare the rag embedding request.");
 
                     let rag_embedding_request = RagEmbeddingRequest {
                         embedding_request,
@@ -556,25 +551,39 @@ impl MergeRagContext for RagPromptBuilder {
         policy: MergeRagContextPolicy,
     ) -> ChatPromptsError::Result<()> {
         if messages.is_empty() {
+            error!(target: "rag_prompt_builder", "No message in the chat request.");
+
             return Err(ChatPromptsError::PromptError::NoMessages);
         }
 
         if context.is_empty() {
-            return Err(ChatPromptsError::PromptError::Operation(
-                "No context provided.".to_string(),
-            ));
+            let err_msg = "No context provided.";
+
+            // log
+            error!(target: "rag_prompt_builder", "{}", &err_msg);
+
+            return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
         }
 
         if policy == MergeRagContextPolicy::SystemMessage && !has_system_prompt {
-            return Err(ChatPromptsError::PromptError::Operation("The chat model does not support system message, while the given rag policy by '--policy' option requires that the RAG context is merged into system message. Please check the relevant CLI options and try again.".to_owned(),
-        ));
+            let err_msg = "The chat model does not support system message, while the given rag policy by '--policy' option requires that the RAG context is merged into system message. Please check the relevant CLI options and try again.";
+
+            // log
+            error!(target: "rag_prompt_builder", "{}", &err_msg);
+
+            return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
         }
+
+        info!(target: "rag_prompt_builder", "rag_policy: {}", &policy);
 
         let context = context[0].trim_end();
 
+        info!(target: "rag_prompt_builder", "context:\n{}", context);
+
         match policy {
             MergeRagContextPolicy::SystemMessage => {
-                println!("\n[+] Merging RAG context into system message ...");
+                info!(target: "rag_prompt_builder", "Merge RAG context into system message.");
+
                 match &messages[0] {
                     ChatCompletionRequestMessage::System(message) => {
                         let system_message = match GLOBAL_RAG_PROMPT.get() {
@@ -635,7 +644,8 @@ impl MergeRagContext for RagPromptBuilder {
                 }
             }
             MergeRagContextPolicy::LastUserMessage => {
-                println!("\n[+] Merging RAG context into last user message ...");
+                info!(target: "rag_prompt_builder", "Merge RAG context into last user message.");
+
                 let len = messages.len();
                 match &messages.last() {
                     Some(ChatCompletionRequestMessage::User(message)) => {
@@ -659,10 +669,13 @@ impl MergeRagContext for RagPromptBuilder {
                         }
                     }
                     _ => {
-                        return Err(ChatPromptsError::PromptError::BadMessages(
-                            "The last message in the chat request should be a user message."
-                                .to_string(),
-                        ))
+                        let err_msg =
+                            "The last message in the chat request should be a user message.";
+
+                        // log
+                        error!(target: "rag_prompt_builder", "{}", &err_msg);
+
+                        return Err(ChatPromptsError::PromptError::BadMessages(err_msg.into()));
                     }
                 }
             }
@@ -1034,7 +1047,7 @@ pub(crate) async fn doc_to_embeddings_handler(
     chunk_capacity: usize,
 ) -> Response<Body> {
     // log
-    info!(target: "doc_to_embeddings_handler", "Handle doc_to_embeddings request");
+    info!(target: "doc_to_embeddings_handler", "Handling the coming doc_to_embeddings request.");
 
     // upload the target rag document
     let file_object = if req.method() == Method::POST {
@@ -1187,6 +1200,8 @@ pub(crate) async fn doc_to_embeddings_handler(
 
     // chunk the text
     let chunks = {
+        info!(target: "doc_to_embeddings_handler", "file_id: {}, file_name: {}", &file_object.id, &file_object.filename);
+
         // check if the archives directory exists
         let path = Path::new("archives");
         if !path.exists() {
@@ -1239,6 +1254,8 @@ pub(crate) async fn doc_to_embeddings_handler(
             }
         };
 
+        info!(target: "doc_to_embeddings_handler", "Open and read the file.");
+
         // open the file
         let mut file = match File::open(&file_path) {
             Ok(file) => file,
@@ -1262,6 +1279,8 @@ pub(crate) async fn doc_to_embeddings_handler(
 
             return error::internal_server_error(err_msg);
         }
+
+        info!(target: "doc_to_embeddings_handler", "Chunk the file contents.");
 
         match llama_core::rag::chunk_text(&contents, extension, chunk_capacity) {
             Ok(chunks) => chunks,
@@ -1290,6 +1309,9 @@ pub(crate) async fn doc_to_embeddings_handler(
                 return error::internal_server_error(err_msg);
             }
         };
+
+        info!(target: "doc_to_embeddings_handler", "Prepare the rag embedding request.");
+
         // create an embedding request
         let embedding_request = EmbeddingRequest {
             model,
@@ -1331,7 +1353,7 @@ pub(crate) async fn doc_to_embeddings_handler(
     };
 
     // serialize embedding response
-    match serde_json::to_string(&embedding_response) {
+    let res = match serde_json::to_string(&embedding_response) {
         Ok(s) => {
             // return response
             let result = Response::builder()
@@ -1360,7 +1382,11 @@ pub(crate) async fn doc_to_embeddings_handler(
 
             error::internal_server_error(err_msg)
         }
-    }
+    };
+
+    info!(target: "doc_to_embeddings_handler", "Send the doc_to_embeddings response.");
+
+    res
 }
 
 pub(crate) async fn server_info_handler() -> Response<Body> {
@@ -1419,7 +1445,7 @@ pub(crate) async fn server_info_handler() -> Response<Body> {
 
 pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     // log
-    info!(target: "retrieve_handler", "Handle retrieve request");
+    info!(target: "retrieve_handler", "Handling the coming retrieve request.");
 
     if req.method().eq(&hyper::http::Method::OPTIONS) {
         let result = Response::builder()
@@ -1441,6 +1467,8 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
             }
         }
     }
+
+    info!(target: "rag_query_handler", "Prepare the chat completion request.");
 
     // parse request
     let body_bytes = match to_bytes(req.body_mut()).await {
@@ -1488,6 +1516,8 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
             return error::internal_server_error(err_msg);
         }
     };
+
+    info!(target: "rag_query_handler", "Compute embeddings for user query.");
 
     // * compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
@@ -1582,7 +1612,7 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     };
 
     // * retrieve context
-    match llama_core::rag::rag_retrieve_context(
+    let res = match llama_core::rag::rag_retrieve_context(
         query_embedding.as_slice(),
         server_info.qdrant_config.url.to_string().as_str(),
         server_info.qdrant_config.collection_name.as_str(),
@@ -1592,11 +1622,6 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     .await
     {
         Ok(retrieve_object) => {
-            if let Some(points) = &retrieve_object.points {
-                // log
-                info!(target: "retrieve_handler", "{}", format!("{} point(s) retrieved", points.len()));
-            }
-
             // serialize retrieve object
             let s = match serde_json::to_string(&retrieve_object) {
                 Ok(s) => s,
@@ -1639,5 +1664,9 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
 
             error::internal_server_error(err_msg)
         }
-    }
+    };
+
+    info!(target: "retrieve_handler", "Send the retrieve response.");
+
+    res
 }
