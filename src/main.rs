@@ -191,7 +191,7 @@ async fn main() -> Result<(), ServerError> {
         info!(target: "server_config", "rag_prompt: {}", rag_prompt);
 
         GLOBAL_RAG_PROMPT.set(rag_prompt.clone()).map_err(|_| {
-            ServerError::Operation("Failed to set `GLOBAL_SYSTEM_PROMPT`.".to_string())
+            ServerError::Operation("Failed to set `GLOBAL_RAG_PROMPT`.".to_string())
         })?;
     }
 
