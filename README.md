@@ -19,6 +19,7 @@
   - [Build](#build)
   - [Execute](#execute)
   - [Usage Example](#usage-example)
+  - [Set Log Level](#set-log-level)
 
 <!-- /code_chunk_output -->
 
@@ -532,7 +533,6 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
 - Start an instance of LlamaEdge-RAG API server
 
   ```bash
-  # Assume that the `rag-api-server.wasm` and the model files are in the root directory of the repository
   wasmedge --dir .:. --nn-preload default:GGML:AUTO:Llama-2-7b-chat-hf-Q5_K_M.gguf \
       --nn-preload embedding:GGML:AUTO:all-MiniLM-L6-v2-ggml-model-f16.gguf \
       rag-api-server.wasm \
@@ -562,3 +562,20 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
         -H 'Content-Type: application/json' \
         -d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "What is the location of Paris, France along the Seine River?"}], "model":"Llama-2-7b-chat-hf-Q5_K_M"}'
     ```
+
+## Set Log Level
+
+You can set the log level of the API server by setting the `LLAMA_LOG` environment variable. For example, to set the log level to `debug`, you can run the following command:
+
+```bash
+wasmedge --dir .:. --env LLAMA_LOG=debug \
+    --nn-preload default:GGML:AUTO:Llama-2-7b-chat-hf-Q5_K_M.gguf \
+    --nn-preload embedding:GGML:AUTO:all-MiniLM-L6-v2-ggml-model-f16.gguf \
+    rag-api-server.wasm \
+    --model-name Llama-2-7b-chat-hf-Q5_K_M,all-MiniLM-L6-v2-ggml-model-f16 \
+    --ctx-size 4096,384 \
+    --prompt-template llama-2-chat,embedding \
+    --rag-prompt "Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n"
+```
+
+The log level can be one of the following values: `trace`, `debug`, `info`, `warn`, `error`. The default log level is `info`.
