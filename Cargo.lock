@@ -1122,14 +1122,15 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
 name = "llama-core"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28be0c3fa39c1835cf552d4f41fa3fd1f4d33c2e3846398ac15fe9893bc213af"
+checksum = "48d77ea5fff7681231681a59d38f24bd66562644a037c954507bad9c890aba50"
 dependencies = [
  "chat-prompts",
  "endpoints",
  "futures",
  "futures-util",
+ "log 0.4.21",
  "once_cell",
  "qdrant_rest_client",
  "reqwest_wasi",
@@ -1139,6 +1140,7 @@ dependencies = [
  "thiserror",
  "tiktoken-rs",
  "uuid",
+ "wasi-logger",
  "wasmedge-wasi-nn",
 ]
 
@@ -1638,7 +1640,7 @@ dependencies = [
 
 [[package]]
 name = "rag-api-server"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "anyhow",
  "chat-prompts",
