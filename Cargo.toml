@@ -4,7 +4,7 @@ version = "0.6.3"
 edition = "2021"
 
 [dependencies]
-endpoints = { version = "=0.8.0" }
+endpoints = { version = "=0.8.1" }
 chat-prompts = { version = "=0.8.0" }
 llama-core = { version = "=0.11.2", features = ["logging"] }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
