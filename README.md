@@ -443,6 +443,9 @@ git clone https://github.com/LlamaEdge/rag-api-server.git
 # Change the working directory
 cd rag-api-server
 
+# (Optional) Add the `wasm32-wasi` target to the Rust toolchain
+rustup target add wasm32-wasi
+
 # Build `rag-api-server.wasm` with the `http` support only, or
 cargo build --target wasm32-wasi --release
 
@@ -527,7 +530,7 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
     mkdir qdrant_storage
 
     # Run Qdrant service
-    docker run -p 6333:6333 -p 6334:6334 -v /home/nsen/llamaedge/rag-api-server/qdrant_storage:/qdrant/storage:z qdrant/qdrant
+    docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant
     ```
 
 - Start an instance of LlamaEdge-RAG API server
