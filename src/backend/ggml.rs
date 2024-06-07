@@ -4,7 +4,7 @@ use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::EmbeddingRequest,
     files::FileObject,
-    rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest},
+    rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest, RetrieveObject},
 };
 use futures_util::TryStreamExt;
 use hyper::{body::to_bytes, Body, Method, Request, Response};
@@ -444,7 +444,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     };
 
     // * retrieve context
-    let ro = match llama_core::rag::rag_retrieve_context(
+    let res = match llama_core::rag::rag_retrieve_context(
         query_embedding.as_slice(),
         server_info.qdrant_config.url.to_string().as_str(),
         server_info.qdrant_config.collection_name.as_str(),
@@ -453,49 +453,64 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     )
     .await
     {
-        Ok(search_result) => search_result,
+        Ok(search_result) => Some(search_result),
         Err(e) => {
-            let err_msg = e.to_string();
-
             // log
-            error!(target: "rag_query_handler", "{}", &err_msg);
+            error!(target: "rag_query_handler", "No point retrieved. {}", e);
 
-            return error::internal_server_error(err_msg);
+            None
         }
     };
 
-    match ro.points {
-        Some(scored_points) => {
-            match scored_points.is_empty() {
-                true => {
-                    // log
-                    warn!(target: "rag_query_handler", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
-                }
-                false => {
-                    // update messages with retrieved context
-                    let mut context = String::new();
-                    for (idx, point) in scored_points.iter().enumerate() {
+    if let Some(ro) = res {
+        match ro.points {
+            Some(scored_points) => {
+                match scored_points.is_empty() {
+                    true => {
                         // log
-                        info!(target: "rag_query_handler", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
-
-                        context.push_str(&point.source);
-                        context.push_str("\n\n");
+                        warn!(target: "rag_query_handler", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
                     }
+                    false => {
+                        // update messages with retrieved context
+                        let mut context = String::new();
+                        for (idx, point) in scored_points.iter().enumerate() {
+                            // log
+                            info!(target: "rag_query_handler", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
 
-                    if chat_request.messages.is_empty() {
-                        let err_msg = "No message in the chat request.";
+                            context.push_str(&point.source);
+                            context.push_str("\n\n");
+                        }
 
-                        // log
-                        error!(target: "rag_query_handler", "{}", &err_msg);
+                        if chat_request.messages.is_empty() {
+                            let err_msg = "No message in the chat request.";
 
-                        return error::internal_server_error(err_msg);
-                    }
+                            // log
+                            error!(target: "rag_query_handler", "{}", &err_msg);
 
-                    let prompt_template = match llama_core::utils::chat_prompt_template(
-                        chat_request.model.as_deref(),
-                    ) {
-                        Ok(prompt_template) => prompt_template,
-                        Err(e) => {
+                            return error::internal_server_error(err_msg);
+                        }
+
+                        let prompt_template = match llama_core::utils::chat_prompt_template(
+                            chat_request.model.as_deref(),
+                        ) {
+                            Ok(prompt_template) => prompt_template,
+                            Err(e) => {
+                                let err_msg = e.to_string();
+
+                                // log
+                                error!(target: "rag_query_handler", "{}", &err_msg);
+
+                                return error::internal_server_error(err_msg);
+                            }
+                        };
+
+                        // insert rag context into chat request
+                        if let Err(e) = RagPromptBuilder::build(
+                            &mut chat_request.messages,
+                            &[context],
+                            prompt_template.has_system_prompt(),
+                            server_info.rag_config.policy,
+                        ) {
                             let err_msg = e.to_string();
 
                             // log
@@ -503,29 +518,14 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
 
                             return error::internal_server_error(err_msg);
                         }
-                    };
-
-                    // insert rag context into chat request
-                    if let Err(e) = RagPromptBuilder::build(
-                        &mut chat_request.messages,
-                        &[context],
-                        prompt_template.has_system_prompt(),
-                        server_info.rag_config.policy,
-                    ) {
-                        let err_msg = e.to_string();
-
-                        // log
-                        error!(target: "rag_query_handler", "{}", &err_msg);
-
-                        return error::internal_server_error(err_msg);
                     }
                 }
             }
-        }
-        None => {
-            // log
-            warn!(target: "rag_query_handler", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
-            ));
+            None => {
+                // log
+                warn!(target: "rag_query_handler", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
+                ));
+            }
         }
     }
 
@@ -1621,9 +1621,9 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     )
     .await
     {
-        Ok(retrieve_object) => {
+        Ok(ro) => {
             // serialize retrieve object
-            let s = match serde_json::to_string(&retrieve_object) {
+            let s = match serde_json::to_string(&ro) {
                 Ok(s) => s,
                 Err(e) => {
                     let err_msg = format!("Fail to serialize retrieve object. {}", e);
@@ -1657,12 +1657,48 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
             }
         }
         Err(e) => {
-            let err_msg = e.to_string();
-
             // log
-            error!(target: "retrieve_handler", "{}", &err_msg);
+            error!(target: "retrieve_handler", "{}", e);
 
-            error::internal_server_error(err_msg)
+            let ro = RetrieveObject {
+                points: None,
+                limit: server_info.qdrant_config.limit as usize,
+                score_threshold: server_info.qdrant_config.score_threshold,
+            };
+
+            // serialize retrieve object
+            let s = match serde_json::to_string(&ro) {
+                Ok(s) => s,
+                Err(e) => {
+                    let err_msg = format!("Fail to serialize retrieve object. {}", e);
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
+                }
+            };
+
+            // return response
+            let result = Response::builder()
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Access-Control-Allow-Methods", "*")
+                .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
+                .header("user", id)
+                .body(Body::from(s));
+
+            match result {
+                Ok(response) => response,
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    error::internal_server_error(e.to_string())
+                }
+            }
         }
     };
 
