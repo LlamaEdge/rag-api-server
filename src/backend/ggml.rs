@@ -325,6 +325,9 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
             // log
             error!(target: "rag_query_handler", "{}", &err_msg);
 
+            // log body_bytes
+            error!(target: "rag_query_handler", "raw data:\n{:?}", &body_bytes.to_ascii_lowercase());
+
             return error::bad_request(err_msg);
         }
     };
