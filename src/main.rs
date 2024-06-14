@@ -76,7 +76,7 @@ struct Cli {
     #[arg(long = "rag-policy", default_value_t, value_enum)]
     policy: MergeRagContextPolicy,
     /// URL of Qdrant REST Service
-    #[arg(long, default_value = "http://localhost:6333")]
+    #[arg(long, default_value = "http://127.0.0.1:6333")]
     qdrant_url: String,
     /// Name of Qdrant collection
     #[arg(long, default_value = "default")]
