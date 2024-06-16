@@ -1,14 +1,10 @@
-use crate::{
-    error,
-    utils::{gen_chat_id, print_log_begin_separator, print_log_end_separator},
-    GLOBAL_RAG_PROMPT, SERVER_INFO,
-};
+use crate::{error, utils::gen_chat_id, GLOBAL_RAG_PROMPT, SERVER_INFO};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::EmbeddingRequest,
     files::FileObject,
-    rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest},
+    rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest, RetrieveObject},
 };
 use futures_util::TryStreamExt;
 use hyper::{body::to_bytes, Body, Method, Request, Response};
@@ -22,11 +18,19 @@ use std::{
 };
 
 /// List all models available.
-pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
+pub(crate) async fn models_handler() -> Response<Body> {
+    // log
+    info!(target: "models_handler", "Handling the coming model list request.");
+
     let list_models_response = match llama_core::models::models().await {
         Ok(list_models_response) => list_models_response,
         Err(e) => {
-            return error::internal_server_error(e.to_string());
+            let err_msg = format!("Failed to get model list. Reason: {}", e);
+
+            // log
+            error!(target: "models_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
@@ -34,7 +38,12 @@ pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
     let s = match serde_json::to_string(&list_models_response) {
         Ok(s) => s,
         Err(e) => {
-            return error::internal_server_error(e.to_string());
+            let err_msg = format!("Failed to serialize the model list result. Reason: {}", e);
+
+            // log
+            error!(target: "models_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
@@ -45,20 +54,35 @@ pub(crate) async fn models_handler() -> Result<Response<Body>, hyper::Error> {
         .header("Access-Control-Allow-Headers", "*")
         .header("Content-Type", "application/json")
         .body(Body::from(s));
-    match result {
-        Ok(response) => Ok(response),
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
+    let res = match result {
+        Ok(response) => response,
+        Err(e) => {
+            let err_msg = format!("Failed to get model list. Reason: {}", e);
+
+            // log
+            error!(target: "models_handler", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
+        }
+    };
+
+    // log
+    info!(target: "models_handler", "Send the model list response.");
+
+    res
 }
 
 /// Process a chat-completion request in stream mode and returns a chat-completion response with the answer from the model.
-async fn chat_completions_stream(
-    mut chat_request: ChatCompletionRequest,
-) -> Result<Response<Body>, hyper::Error> {
+async fn chat_completions_stream(mut chat_request: ChatCompletionRequest) -> Response<Body> {
+    info!(target: "chat_completions_stream", "Process the chat completions in stream mode.");
+
     if chat_request.user.is_none() {
         chat_request.user = Some(gen_chat_id())
     };
     let id = chat_request.user.clone().unwrap();
+
+    // log user id
+    info!(target: "chat_completions_stream", "user: {}", &id);
 
     match llama_core::chat::chat_completions_stream(&mut chat_request).await {
         Ok(stream) => {
@@ -75,18 +99,37 @@ async fn chat_completions_stream(
                 .body(Body::wrap_stream(stream));
 
             match result {
-                Ok(response) => Ok(response),
-                Err(e) => error::internal_server_error(e.to_string()),
+                Ok(response) => {
+                    // log
+                    info!(target: "chat_completions_stream", "finish chat completions in stream mode");
+
+                    response
+                }
+                Err(e) => {
+                    let err_msg = format!("Failed chat completions in stream mode. Reason: {}", e);
+
+                    // log
+                    error!(target: "chat_completions_stream", "{}", &err_msg);
+
+                    error::internal_server_error(err_msg)
+                }
             }
         }
-        Err(e) => error::internal_server_error(e.to_string()),
+        Err(e) => {
+            let err_msg = format!("Failed chat completions in stream mode. Reason: {}", e);
+
+            // log
+            error!(target: "chat_completions_stream", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
+        }
     }
 }
 
 /// Process a chat-completion request and returns a chat-completion response with the answer from the model.
-async fn chat_completions(
-    mut chat_request: ChatCompletionRequest,
-) -> Result<Response<Body>, hyper::Error> {
+async fn chat_completions(mut chat_request: ChatCompletionRequest) -> Response<Body> {
+    info!(target: "chat_completions", "Process the chat completions request in non-stream mode.");
+
     if chat_request.user.is_none() {
         chat_request.user = Some(gen_chat_id())
     };
@@ -98,10 +141,12 @@ async fn chat_completions(
             let s = match serde_json::to_string(&chat_completion_object) {
                 Ok(s) => s,
                 Err(e) => {
-                    return error::internal_server_error(format!(
-                        "Fail to serialize chat completion object. {}",
-                        e
-                    ));
+                    let err_msg = format!("Failed to serialize chat completion object. {}", e);
+
+                    // log
+                    error!(target: "chat_completions", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
                 }
             };
 
@@ -115,24 +160,60 @@ async fn chat_completions(
                 .body(Body::from(s));
 
             match result {
-                Ok(response) => Ok(response),
-                Err(e) => error::internal_server_error(e.to_string()),
+                Ok(response) => {
+                    // log
+                    info!(target: "chat_completions", "finish chat completions in non-stream mode");
+
+                    response
+                }
+                Err(e) => {
+                    let err_msg =
+                        format!("Failed chat completions in non-stream mode. Reason: {}", e);
+
+                    // log
+                    error!(target: "chat_completions", "{}", &err_msg);
+
+                    error::internal_server_error(err_msg)
+                }
             }
         }
-        Err(e) => error::internal_server_error(e.to_string()),
+        Err(e) => {
+            let err_msg = e.to_string();
+
+            // log
+            error!(target: "chat_completions", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
+        }
     }
 }
 
 /// Compute embeddings for the input text and return the embeddings object.
-pub(crate) async fn embeddings_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
+pub(crate) async fn embeddings_handler(mut req: Request<Body>) -> Response<Body> {
+    // log
+    info!(target: "embeddings_handler", "Handling the coming embeddings request");
+
     // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
+    let body_bytes = match to_bytes(req.body_mut()).await {
+        Ok(body_bytes) => body_bytes,
+        Err(e) => {
+            let err_msg = format!("Fail to read buffer from request body. {}", e);
+
+            // log
+            error!(target: "embeddings_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
+    };
     let mut embedding_request: EmbeddingRequest = match serde_json::from_slice(&body_bytes) {
         Ok(embedding_request) => embedding_request,
         Err(e) => {
-            return error::bad_request(format!("Fail to parse embedding request: {msg}", msg = e));
+            let err_msg = format!("Fail to deserialize embedding request: {msg}", msg = e);
+
+            // log
+            error!(target: "embeddings_handler", "{}", &err_msg);
+
+            return error::bad_request(err_msg);
         }
     };
 
@@ -141,8 +222,10 @@ pub(crate) async fn embeddings_handler(
     };
     let id = embedding_request.user.clone().unwrap();
 
-    println!("\n[+] Running embeddings handler ...");
-    match llama_core::embeddings::embeddings(&embedding_request).await {
+    // log user id
+    info!(target: "embedding_request", "user: {}", &id);
+
+    let res = match llama_core::embeddings::embeddings(&embedding_request).await {
         Ok(embedding_response) => {
             // serialize embedding object
             match serde_json::to_string(&embedding_response) {
@@ -156,129 +239,48 @@ pub(crate) async fn embeddings_handler(
                         .header("user", id)
                         .body(Body::from(s));
                     match result {
-                        Ok(response) => Ok(response),
-                        Err(e) => error::internal_server_error(e.to_string()),
+                        Ok(response) => response,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "embeddings_handler", "{}", &err_msg);
+
+                            error::internal_server_error(err_msg)
+                        }
                     }
                 }
-                Err(e) => error::internal_server_error(format!(
-                    "Fail to serialize embedding object. {}",
-                    e
-                )),
-            }
-        }
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
-}
+                Err(e) => {
+                    let err_msg = format!("Fail to serialize embedding object. {}", e);
 
-/// Compute embeddings for document chunks and persist them in the specified Qdrant server.
-///
-/// Note that the body of the request is deserialized to a `RagEmbeddingRequest` instance.
-pub(crate) async fn _rag_doc_chunks_to_embeddings_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
-    // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
-    let rag_embedding_request: RagEmbeddingRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(embedding_request) => embedding_request,
-        Err(e) => {
-            return error::bad_request(format!("Fail to parse embedding request: {msg}", msg = e));
-        }
-    };
+                    // log
+                    error!(target: "embeddings_handler", "{}", &err_msg);
 
-    match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
-        Ok(embedding_response) => {
-            // serialize embedding object
-            match serde_json::to_string(&embedding_response) {
-                Ok(s) => {
-                    // return response
-                    let result = Response::builder()
-                        .header("Access-Control-Allow-Origin", "*")
-                        .header("Access-Control-Allow-Methods", "*")
-                        .header("Access-Control-Allow-Headers", "*")
-                        .header("Content-Type", "application/json")
-                        .body(Body::from(s));
-                    match result {
-                        Ok(response) => Ok(response),
-                        Err(e) => error::internal_server_error(e.to_string()),
-                    }
+                    error::internal_server_error(err_msg)
                 }
-                Err(e) => error::internal_server_error(format!(
-                    "Fail to serialize embedding object. {}",
-                    e
-                )),
-            }
-        }
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
-}
-
-/// Compute embeddings for document chunks and persist them in the specified Qdrant server.
-///
-/// Note tht the body of the request is deserialized to a `EmbeddingRequest` instance.
-pub(crate) async fn _rag_doc_chunks_to_embeddings2_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
-    print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
-
-    // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
-    let embedding_request: EmbeddingRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(embedding_request) => embedding_request,
-        Err(e) => {
-            return error::bad_request(format!("Fail to parse embedding request: {msg}", msg = e));
-        }
-    };
-
-    let server_info = match SERVER_INFO.get() {
-        Some(server_info) => server_info,
-        None => {
-            return error::internal_server_error("The server info is not set.");
-        }
-    };
-
-    // create rag embedding request
-    let rag_embedding_request = RagEmbeddingRequest::from_embedding_request(
-        embedding_request,
-        server_info.qdrant_config.url.clone(),
-        server_info.qdrant_config.collection_name.clone(),
-    );
-
-    let embedding_response =
-        match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
-            Ok(embedding_response) => embedding_response,
-            Err(e) => return error::internal_server_error(e.to_string()),
-        };
-
-    print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
-
-    // serialize embedding object
-    match serde_json::to_string(&embedding_response) {
-        Ok(s) => {
-            // return response
-            let result = Response::builder()
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .header("Content-Type", "application/json")
-                .body(Body::from(s));
-            match result {
-                Ok(response) => Ok(response),
-                Err(e) => error::internal_server_error(e.to_string()),
             }
         }
         Err(e) => {
-            error::internal_server_error(format!("Fail to serialize embedding object. {}", e))
+            let err_msg = e.to_string();
+
+            // log
+            error!(target: "embeddings_handler", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
         }
-    }
+    };
+
+    info!(target: "embeddings_handler", "Send the embeddings response");
+
+    res
 }
 
 /// Query a user input and return a chat-completion response with the answer from the model.
 ///
 /// Note that the body of the request is deserialized to a `ChatCompletionRequest` instance.
-pub(crate) async fn rag_query_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
-    print_log_begin_separator("RAG (Query user input)", Some("*"), None);
+pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> {
+    // log
+    info!(target: "rag_query_handler", "Handling the coming rag query request");
 
     if req.method().eq(&hyper::http::Method::OPTIONS) {
         let result = Response::builder()
@@ -289,41 +291,79 @@ pub(crate) async fn rag_query_handler(
             .body(Body::empty());
 
         match result {
-            Ok(response) => return Ok(response),
+            Ok(response) => return response,
             Err(e) => {
-                return error::internal_server_error(e.to_string());
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "rag_query_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         }
     }
 
+    info!(target: "rag_query_handler", "Prepare the chat completion request.");
+
     // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
+    let body_bytes = match to_bytes(req.body_mut()).await {
+        Ok(body_bytes) => body_bytes,
+        Err(e) => {
+            let err_msg = format!("Fail to read buffer from request body. {}", e);
+
+            // log
+            error!(target: "rag_query_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
+    };
     let mut chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
         Ok(chat_request) => chat_request,
         Err(e) => {
-            return error::bad_request(format!(
-                "Fail to parse chat completion request: {msg}",
-                msg = e
-            ));
+            let err_msg = format!("Fail to deserialize chat completion request: {}", e);
+
+            // log
+            error!(target: "rag_query_handler", "{}", &err_msg);
+
+            // log body_bytes
+            error!(target: "rag_query_handler", "raw data:\n{:?}", &body_bytes.to_ascii_lowercase());
+
+            return error::bad_request(err_msg);
         }
     };
 
+    // check if the user id is provided
     if chat_request.user.is_none() {
         chat_request.user = Some(gen_chat_id())
     };
 
+    // log user id
+    info!(target: "rag_query_handler", "user: {}", chat_request.user.clone().unwrap());
+
     let server_info = match SERVER_INFO.get() {
         Some(server_info) => server_info,
         None => {
-            return error::internal_server_error("The server info is not set.");
+            let err_msg = "The server info is not set.";
+
+            // log
+            error!(target: "rag_query_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
-    println!("\n[+] Computing embeddings for user query ...");
+    info!(target: "rag_query_handler", "Compute embeddings for user query.");
 
     // * compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
-        true => return error::bad_request("Messages should not be empty"),
+        true => {
+            let err_msg = "Messages should not be empty.";
+
+            // log
+            error!(target: "rag_query_handler", "{}", &err_msg);
+
+            return error::bad_request(err_msg);
+        }
         false => {
             let last_message = chat_request.messages.last().unwrap();
             match last_message {
@@ -331,18 +371,29 @@ pub(crate) async fn rag_query_handler(
                     let query_text = match user_message.content() {
                         ChatCompletionUserMessageContent::Text(text) => text,
                         _ => {
-                            return error::bad_request(
-                                "The last message must be a text content user message",
-                            )
+                            let err_msg = "The last message must be a text content user message";
+
+                            // log
+                            error!(target: "rag_query_handler", "{}", &err_msg);
+
+                            return error::bad_request(err_msg);
                         }
                     };
 
-                    println!("    * user query: {}\n", query_text);
+                    // log
+                    info!(target: "rag_query_handler", "query text: {}", query_text);
 
                     // get the available embedding models
                     let embedding_model_names = match llama_core::utils::embedding_model_names() {
                         Ok(model_names) => model_names,
-                        Err(e) => return error::internal_server_error(e.to_string()),
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "rag_query_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
                     };
 
                     // create a embedding request
@@ -352,10 +403,6 @@ pub(crate) async fn rag_query_handler(
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
-
-                    if let Ok(request_str) = serde_json::to_string_pretty(&embedding_request) {
-                        println!("    * embedding request (json):\n\n{}", request_str);
-                    }
 
                     let rag_embedding_request = RagEmbeddingRequest {
                         embedding_request,
@@ -367,23 +414,40 @@ pub(crate) async fn rag_query_handler(
                     match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
                         Ok(embedding_response) => embedding_response,
                         Err(e) => {
-                            return error::internal_server_error(e.to_string());
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "rag_query_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
                         }
                     }
                 }
-                _ => return error::bad_request("The last message must be a user message"),
+                _ => {
+                    let err_msg = "The last message must be a user message";
+
+                    // log
+                    error!(target: "rag_query_handler", "{}", &err_msg);
+
+                    return error::bad_request(err_msg);
+                }
             }
         }
     };
     let query_embedding: Vec<f32> = match embedding_response.data.first() {
         Some(embedding) => embedding.embedding.iter().map(|x| *x as f32).collect(),
-        None => return error::internal_server_error("No embeddings returned"),
+        None => {
+            let err_msg = "No embeddings returned";
+
+            // log
+            error!(target: "rag_query_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
     };
 
-    println!("\n[+] Retrieving context ...");
-
     // * retrieve context
-    let ro = match llama_core::rag::rag_retrieve_context(
+    let res = match llama_core::rag::rag_retrieve_context(
         query_embedding.as_slice(),
         server_info.qdrant_config.url.to_string().as_str(),
         server_info.qdrant_config.collection_name.as_str(),
@@ -392,66 +456,79 @@ pub(crate) async fn rag_query_handler(
     )
     .await
     {
-        Ok(search_result) => search_result,
+        Ok(search_result) => Some(search_result),
         Err(e) => {
-            return error::internal_server_error(e.to_string());
+            // log
+            error!(target: "rag_query_handler", "No point retrieved. {}", e);
+
+            None
         }
     };
 
-    match ro.points {
-        Some(scored_points) => {
-            match scored_points.is_empty() {
-                true => {
-                    println!(
-                        "    * No point retrieved (score < threshold {})",
-                        server_info.qdrant_config.score_threshold
-                    );
-                    println!("\n[+] Answer the user query ...");
-                }
-                false => {
-                    // update messages with retrieved context
-                    let mut context = String::new();
-                    for (idx, point) in scored_points.iter().enumerate() {
-                        println!("    * Point {}: score: {}", idx, point.score);
-                        println!("      Source: {}", &point.source);
-
-                        context.push_str(&point.source);
-                        context.push_str("\n\n");
+    if let Some(ro) = res {
+        match ro.points {
+            Some(scored_points) => {
+                match scored_points.is_empty() {
+                    true => {
+                        // log
+                        warn!(target: "rag_query_handler", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
                     }
+                    false => {
+                        // update messages with retrieved context
+                        let mut context = String::new();
+                        for (idx, point) in scored_points.iter().enumerate() {
+                            // log
+                            info!(target: "rag_query_handler", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
 
-                    if chat_request.messages.is_empty() {
-                        return error::internal_server_error("No message in the chat request.");
-                    }
-
-                    let prompt_template = match llama_core::utils::chat_prompt_template(
-                        chat_request.model.as_deref(),
-                    ) {
-                        Ok(prompt_template) => prompt_template,
-                        Err(e) => {
-                            return error::internal_server_error(e.to_string());
+                            context.push_str(&point.source);
+                            context.push_str("\n\n");
                         }
-                    };
 
-                    // insert rag context into chat request
-                    if let Err(e) = RagPromptBuilder::build(
-                        &mut chat_request.messages,
-                        &[context],
-                        prompt_template.has_system_prompt(),
-                        server_info.rag_config.policy,
-                    ) {
-                        return error::internal_server_error(e.to_string());
+                        if chat_request.messages.is_empty() {
+                            let err_msg = "No message in the chat request.";
+
+                            // log
+                            error!(target: "rag_query_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+
+                        let prompt_template = match llama_core::utils::chat_prompt_template(
+                            chat_request.model.as_deref(),
+                        ) {
+                            Ok(prompt_template) => prompt_template,
+                            Err(e) => {
+                                let err_msg = e.to_string();
+
+                                // log
+                                error!(target: "rag_query_handler", "{}", &err_msg);
+
+                                return error::internal_server_error(err_msg);
+                            }
+                        };
+
+                        // insert rag context into chat request
+                        if let Err(e) = RagPromptBuilder::build(
+                            &mut chat_request.messages,
+                            &[context],
+                            prompt_template.has_system_prompt(),
+                            server_info.rag_config.policy,
+                        ) {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "rag_query_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
                     }
-
-                    println!("\n[+] Answer the user query with the context info ...");
                 }
             }
-        }
-        None => {
-            println!(
-                "    * No point retrieved (score < threshold {})",
-                server_info.qdrant_config.score_threshold
-            );
-            println!("\n[+] Answer the user query ...");
+            None => {
+                // log
+                warn!(target: "rag_query_handler", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
+                ));
+            }
         }
     }
 
@@ -461,7 +538,8 @@ pub(crate) async fn rag_query_handler(
         Some(false) | None => chat_completions(chat_request).await,
     };
 
-    print_log_end_separator(Some("*"), None);
+    // log
+    info!(target: "rag_query_handler", "Send the rag query response");
 
     res
 }
@@ -476,25 +554,39 @@ impl MergeRagContext for RagPromptBuilder {
         policy: MergeRagContextPolicy,
     ) -> ChatPromptsError::Result<()> {
         if messages.is_empty() {
+            error!(target: "rag_prompt_builder", "No message in the chat request.");
+
             return Err(ChatPromptsError::PromptError::NoMessages);
         }
 
         if context.is_empty() {
-            return Err(ChatPromptsError::PromptError::Operation(
-                "No context provided.".to_string(),
-            ));
+            let err_msg = "No context provided.";
+
+            // log
+            error!(target: "rag_prompt_builder", "{}", &err_msg);
+
+            return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
         }
 
         if policy == MergeRagContextPolicy::SystemMessage && !has_system_prompt {
-            return Err(ChatPromptsError::PromptError::Operation("The chat model does not support system message, while the given rag policy by '--policy' option requires that the RAG context is merged into system message. Please check the relevant CLI options and try again.".to_owned(),
-        ));
+            let err_msg = "The chat model does not support system message, while the given rag policy by '--policy' option requires that the RAG context is merged into system message. Please check the relevant CLI options and try again.";
+
+            // log
+            error!(target: "rag_prompt_builder", "{}", &err_msg);
+
+            return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
         }
+
+        info!(target: "rag_prompt_builder", "rag_policy: {}", &policy);
 
         let context = context[0].trim_end();
 
+        info!(target: "rag_prompt_builder", "context:\n{}", context);
+
         match policy {
             MergeRagContextPolicy::SystemMessage => {
-                println!("\n[+] Merging RAG context into system message ...");
+                info!(target: "rag_prompt_builder", "Merge RAG context into system message.");
+
                 match &messages[0] {
                     ChatCompletionRequestMessage::System(message) => {
                         let system_message = match GLOBAL_RAG_PROMPT.get() {
@@ -555,7 +647,8 @@ impl MergeRagContext for RagPromptBuilder {
                 }
             }
             MergeRagContextPolicy::LastUserMessage => {
-                println!("\n[+] Merging RAG context into last user message ...");
+                info!(target: "rag_prompt_builder", "Merge RAG context into last user message.");
+
                 let len = messages.len();
                 match &messages.last() {
                     Some(ChatCompletionRequestMessage::User(message)) => {
@@ -579,10 +672,13 @@ impl MergeRagContext for RagPromptBuilder {
                         }
                     }
                     _ => {
-                        return Err(ChatPromptsError::PromptError::BadMessages(
-                            "The last message in the chat request should be a user message."
-                                .to_string(),
-                        ))
+                        let err_msg =
+                            "The last message in the chat request should be a user message.";
+
+                        // log
+                        error!(target: "rag_prompt_builder", "{}", &err_msg);
+
+                        return Err(ChatPromptsError::PromptError::BadMessages(err_msg.into()));
                     }
                 }
             }
@@ -592,10 +688,11 @@ impl MergeRagContext for RagPromptBuilder {
     }
 }
 
-pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    if req.method() == Method::POST {
-        println!("\n[+] Running files handler ...");
+pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
+    // log
+    info!(target: "files_handler", "Handling the coming files request");
 
+    let res = if req.method() == Method::POST {
         let boundary = "boundary=";
 
         let boundary = req.headers().get("content-type").and_then(|ct| {
@@ -605,7 +702,18 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
         });
 
         let req_body = req.into_body();
-        let body_bytes = to_bytes(req_body).await?;
+        let body_bytes = match to_bytes(req_body).await {
+            Ok(body_bytes) => body_bytes,
+            Err(e) => {
+                let err_msg = format!("Fail to read buffer from request body. {}", e);
+
+                // log
+                error!(target: "files_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
         let cursor = Cursor::new(body_bytes.to_vec());
 
         let mut multipart = Multipart::with_body(cursor, boundary.unwrap());
@@ -616,35 +724,48 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                 let filename = match field.headers.filename {
                     Some(filename) => filename,
                     None => {
-                        return error::internal_server_error(
-                            "Failed to upload the target file. The filename is not provided.",
-                        );
+                        let err_msg =
+                            "Failed to upload the target file. The filename is not provided.";
+
+                        // log
+                        error!(target: "files_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
                 if !((filename).to_lowercase().ends_with(".txt")
                     || (filename).to_lowercase().ends_with(".md"))
                 {
-                    return error::internal_server_error(
-                        "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported.",
+                    let err_msg = format!(
+                        "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported. The file extension is {}.",
+                        &filename
                     );
+
+                    // log
+                    error!(target: "files_handler", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
                 }
 
                 let mut buffer = Vec::new();
                 let size_in_bytes = match field.data.read_to_end(&mut buffer) {
                     Ok(size_in_bytes) => size_in_bytes,
                     Err(e) => {
-                        return error::internal_server_error(format!(
-                            "Failed to read the target file. {}",
-                            e
-                        ));
+                        let err_msg = format!("Failed to read the target file. {}", e);
+
+                        // log
+                        error!(target: "files_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
                 // create a unique file id
                 let id = format!("file_{}", uuid::Uuid::new_v4());
 
-                println!("    * Saving to {}/{}", &id, &filename);
+                // log
+                info!(target: "files_handler", "file_id: {}, file_name: {}", &id, &filename);
 
                 // save the file
                 let path = Path::new("archives");
@@ -658,10 +779,13 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                 let mut file = match File::create(file_path.join(&filename)) {
                     Ok(file) => file,
                     Err(e) => {
-                        return error::internal_server_error(format!(
-                            "Failed to create archive document {}. {}",
-                            &filename, e
-                        ));
+                        let err_msg =
+                            format!("Failed to create archive document {}. {}", &filename, e);
+
+                        // log
+                        error!(target: "files_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
                 file.write_all(&buffer[..]).unwrap();
@@ -669,7 +793,12 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                 let created_at = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
                     Ok(n) => n.as_secs(),
                     Err(_) => {
-                        return error::internal_server_error("Failed to get the current time.")
+                        let err_msg = "Failed to get the current time.";
+
+                        // log
+                        error!(target: "files_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
@@ -687,17 +816,18 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
             }
         }
 
-        println!("[+] File uploaded successfully.\n");
         match file_object {
             Some(fo) => {
                 // serialize chat completion object
                 let s = match serde_json::to_string(&fo) {
                     Ok(s) => s,
                     Err(e) => {
-                        return error::internal_server_error(format!(
-                            "Fail to serialize file object. {}",
-                            e
-                        ));
+                        let err_msg = format!("Failed to serialize file object. {}", e);
+
+                        // log
+                        error!(target: "files_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
@@ -710,69 +840,128 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Result<Response<Body>, 
                     .body(Body::from(s));
 
                 match result {
-                    Ok(response) => Ok(response),
-                    Err(e) => error::internal_server_error(e.to_string()),
+                    Ok(response) => response,
+                    Err(e) => {
+                        let err_msg = e.to_string();
+
+                        // log
+                        error!(target: "files_handler", "{}", &err_msg);
+
+                        error::internal_server_error(err_msg)
+                    }
                 }
             }
-            None => error::internal_server_error(
-                "Failed to upload the target file. Not found the target file.",
-            ),
+            None => {
+                let err_msg = "Failed to upload the target file. Not found the target file.";
+
+                // log
+                error!(target: "files_handler", "{}", &err_msg);
+
+                error::internal_server_error(err_msg)
+            }
         }
     } else if req.method() == Method::GET {
-        error::internal_server_error("Not implemented for listing files.")
+        let err_msg = "Not implemented for listing files.";
+
+        // log
+        error!(target: "files_handler", "{}", &err_msg);
+
+        error::internal_server_error(err_msg)
     } else {
-        error::internal_server_error("Invalid HTTP Method.")
-    }
+        let err_msg = "Invalid HTTP Method.";
+
+        // log
+        error!(target: "files_handler", "{}", &err_msg);
+
+        error::internal_server_error(err_msg)
+    };
+
+    info!(target: "files_handler", "Send the files response");
+
+    res
 }
 
-pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    println!("\n[+] Running chunks handler ...");
+pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
+    // log
+    info!(target: "chunks_handler", "Handling the coming chunks request");
 
     // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
-    let chunks_request: ChunksRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(chunks_request) => chunks_request,
+    let body_bytes = match to_bytes(req.body_mut()).await {
+        Ok(body_bytes) => body_bytes,
         Err(e) => {
-            return error::bad_request(format!("Fail to parse chunks request: {msg}", msg = e));
+            let err_msg = format!("Fail to read buffer from request body. {}", e);
+
+            // log
+            error!(target: "chunks_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
-    println!("[+] Detecting the target file ...");
+    let chunks_request: ChunksRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(chunks_request) => chunks_request,
+        Err(e) => {
+            let err_msg = format!("Fail to deserialize chunks request: {msg}", msg = e);
+
+            // log
+            error!(target: "chunks_handler", "{}", &err_msg);
+
+            return error::bad_request(err_msg);
+        }
+    };
+
     // check if the archives directory exists
     let path = Path::new("archives");
     if !path.exists() {
-        return error::internal_server_error("The `archives` directory does not exist.");
+        let err_msg = "The `archives` directory does not exist.";
+
+        // log
+        error!(target: "chunks_handler", "{}", &err_msg);
+
+        return error::internal_server_error(err_msg);
     }
 
     // check if the archive id exists
     let archive_path = path.join(&chunks_request.id);
     if !archive_path.exists() {
-        let message = format!("Not found archive id: {}", &chunks_request.id);
-        return error::internal_server_error(message);
+        let err_msg = format!("Not found archive id: {}", &chunks_request.id);
+
+        // log
+        error!(target: "chunks_handler", "{}", &err_msg);
+
+        return error::internal_server_error(err_msg);
     }
 
     // check if the file exists
     let file_path = archive_path.join(&chunks_request.filename);
     if !file_path.exists() {
-        let message = format!(
+        let err_msg = format!(
             "Not found file: {} in archive id: {}",
             &chunks_request.filename, &chunks_request.id
         );
-        return error::internal_server_error(message);
+
+        // log
+        error!(target: "chunks_handler", "{}", &err_msg);
+
+        return error::internal_server_error(err_msg);
     }
-    println!(
-        "    * Found {}/{}",
-        &chunks_request.id, &chunks_request.filename
-    );
+
+    // log
+    info!(target: "chunks_handler", "file_id: {}, file_name: {}", &chunks_request.id, &chunks_request.filename);
 
     // get the extension of the archived file
     let extension = match file_path.extension().and_then(std::ffi::OsStr::to_str) {
         Some(extension) => extension,
         None => {
-            return error::internal_server_error(format!(
+            let err_msg = format!(
                 "Failed to get the extension of the archived `{}`.",
                 &chunks_request.filename
-            ));
+            );
+
+            // log
+            error!(target: "chunks_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
@@ -780,31 +969,34 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
     let mut file = match File::open(&file_path) {
         Ok(file) => file,
         Err(e) => {
-            return error::internal_server_error(format!(
-                "Failed to open `{}`. {}",
-                &chunks_request.filename, e
-            ));
+            let err_msg = format!("Failed to open `{}`. {}", &chunks_request.filename, e);
+
+            // log
+            error!(target: "chunks_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
     // read the file
     let mut contents = String::new();
     if let Err(e) = file.read_to_string(&mut contents) {
-        return error::internal_server_error(format!(
-            "Failed to read `{}`. {}",
-            &chunks_request.filename, e
-        ));
+        let err_msg = format!("Failed to read `{}`. {}", &chunks_request.filename, e);
+
+        // log
+        error!(target: "chunks_handler", "{}", &err_msg);
+
+        return error::internal_server_error(err_msg);
     }
 
-    match llama_core::rag::chunk_text(&contents, extension, chunks_request.chunk_capacity) {
+    let res = match llama_core::rag::chunk_text(&contents, extension, chunks_request.chunk_capacity)
+    {
         Ok(chunks) => {
             let chunks_response = ChunksResponse {
                 id: chunks_request.id,
                 filename: chunks_request.filename,
                 chunks,
             };
-
-            println!("[+] File chunked successfully.\n");
 
             // serialize embedding object
             match serde_json::to_string(&chunks_response) {
@@ -817,24 +1009,49 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Result<Response<Bo
                         .header("Content-Type", "application/json")
                         .body(Body::from(s));
                     match result {
-                        Ok(response) => Ok(response),
-                        Err(e) => error::internal_server_error(e.to_string()),
+                        Ok(response) => response,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "chunks_handler", "{}", &err_msg);
+
+                            error::internal_server_error(err_msg)
+                        }
                     }
                 }
-                Err(e) => error::internal_server_error(format!(
-                    "Fail to serialize chunks response. {}",
-                    e
-                )),
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "chunks_handler", "{}", &err_msg);
+
+                    error::internal_server_error(err_msg)
+                }
             }
         }
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
+        Err(e) => {
+            let err_msg = format!("Fail to serialize chunks response. {}", e);
+
+            // log
+            error!(target: "chunks_handler", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
+        }
+    };
+
+    info!(target: "chunks_handler", "Send the chunks response.");
+
+    res
 }
 
-pub(crate) async fn doc_to_embeddings(
+pub(crate) async fn doc_to_embeddings_handler(
     req: Request<Body>,
     chunk_capacity: usize,
-) -> Result<Response<Body>, hyper::Error> {
+) -> Response<Body> {
+    // log
+    info!(target: "doc_to_embeddings_handler", "Handling the coming doc_to_embeddings request.");
+
     // upload the target rag document
     let file_object = if req.method() == Method::POST {
         let boundary = "boundary=";
@@ -846,7 +1063,18 @@ pub(crate) async fn doc_to_embeddings(
         });
 
         let req_body = req.into_body();
-        let body_bytes = to_bytes(req_body).await?;
+        let body_bytes = match to_bytes(req_body).await {
+            Ok(body_bytes) => body_bytes,
+            Err(e) => {
+                let err_msg = format!("Fail to read buffer from request body. {}", e);
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
         let cursor = Cursor::new(body_bytes.to_vec());
 
         let mut multipart = Multipart::with_body(cursor, boundary.unwrap());
@@ -857,28 +1085,37 @@ pub(crate) async fn doc_to_embeddings(
                 let filename = match field.headers.filename {
                     Some(filename) => filename,
                     None => {
-                        return error::internal_server_error(
-                            "Failed to upload the target file. The filename is not provided.",
-                        );
+                        let err_msg =
+                            "Failed to upload the target file. The filename is not provided.";
+
+                        // log
+                        error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
                 if !((filename).to_lowercase().ends_with(".txt")
                     || (filename).to_lowercase().ends_with(".md"))
                 {
-                    return error::internal_server_error(
-                        "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported.",
-                    );
+                    let err_msg = "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported.";
+
+                    // log
+                    error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
                 }
 
                 let mut buffer = Vec::new();
                 let size_in_bytes = match field.data.read_to_end(&mut buffer) {
                     Ok(size_in_bytes) => size_in_bytes,
                     Err(e) => {
-                        return error::internal_server_error(format!(
-                            "Failed to read the target file. {}",
-                            e
-                        ));
+                        let err_msg = format!("Failed to read the target file. {}", e);
+
+                        // log
+                        error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
@@ -897,18 +1134,29 @@ pub(crate) async fn doc_to_embeddings(
                 let mut file = match File::create(file_path.join(&filename)) {
                     Ok(file) => file,
                     Err(e) => {
-                        return error::internal_server_error(format!(
-                            "Failed to create archive document {}. {}",
-                            &filename, e
-                        ));
+                        let err_msg =
+                            format!("Failed to create archive document {}. {}", &filename, e);
+
+                        // log
+                        error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
                 file.write_all(&buffer[..]).unwrap();
 
+                // log
+                info!(target: "doc_to_embeddings_handler", "file_id: {}, file_name: {}", &id, &filename);
+
                 let created_at = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
                     Ok(n) => n.as_secs(),
                     Err(_) => {
-                        return error::internal_server_error("Failed to get the current time.")
+                        let err_msg = "Failed to get the current time.";
+
+                        // log
+                        error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 };
 
@@ -929,90 +1177,144 @@ pub(crate) async fn doc_to_embeddings(
         match file_object {
             Some(fo) => fo,
             None => {
-                return error::internal_server_error(
-                    "Failed to upload the target file. Not found the target file.",
-                )
+                let err_msg = "Failed to upload the target file. Not found the target file.";
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         }
     } else if req.method() == Method::GET {
-        return error::internal_server_error("Not implemented for listing files.");
+        let err_msg = "Not implemented for listing files.";
+
+        // log
+        error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+        return error::internal_server_error(err_msg);
     } else {
-        return error::internal_server_error("Invalid HTTP Method.");
+        let err_msg = "Invalid HTTP Method.";
+
+        // log
+        error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+        return error::internal_server_error(err_msg);
     };
 
     // chunk the text
     let chunks = {
+        info!(target: "doc_to_embeddings_handler", "file_id: {}, file_name: {}", &file_object.id, &file_object.filename);
+
         // check if the archives directory exists
         let path = Path::new("archives");
         if !path.exists() {
-            return error::internal_server_error("The `archives` directory does not exist.");
+            let err_msg = "The `archives` directory does not exist.";
+
+            // log
+            error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
 
         // check if the archive id exists
         let archive_path = path.join(&file_object.id);
         if !archive_path.exists() {
-            let message = format!("Not found archive id: {}", &file_object.id);
-            return error::internal_server_error(message);
+            let err_msg = format!("Not found archive id: {}", &file_object.id);
+
+            // log
+            error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
 
         // check if the file exists
         let file_path = archive_path.join(&file_object.filename);
         if !file_path.exists() {
-            let message = format!(
+            let err_msg = format!(
                 "Not found file: {} in archive id: {}",
                 &file_object.filename, &file_object.id
             );
-            return error::internal_server_error(message);
+
+            // log
+            error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
 
         // get the extension of the archived file
         let extension = match file_path.extension().and_then(std::ffi::OsStr::to_str) {
             Some(extension) => extension,
             None => {
-                return error::internal_server_error(format!(
+                let err_msg = format!(
                     "Failed to get the extension of the archived `{}`.",
                     &file_object.filename
-                ));
+                );
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         };
+
+        info!(target: "doc_to_embeddings_handler", "Open and read the file.");
 
         // open the file
         let mut file = match File::open(&file_path) {
             Ok(file) => file,
             Err(e) => {
-                return error::internal_server_error(format!(
-                    "Failed to open `{}`. {}",
-                    &file_object.filename, e
-                ));
+                let err_msg = format!("Failed to open `{}`. {}", &file_object.filename, e);
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         };
 
         // read the file
         let mut contents = String::new();
         if let Err(e) = file.read_to_string(&mut contents) {
-            return error::internal_server_error(format!(
-                "Failed to read `{}`. {}",
-                &file_object.filename, e
-            ));
+            let err_msg = format!("Failed to read `{}`. {}", &file_object.filename, e);
+
+            // log
+            error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
+
+        info!(target: "doc_to_embeddings_handler", "Chunk the file contents.");
 
         match llama_core::rag::chunk_text(&contents, extension, chunk_capacity) {
             Ok(chunks) => chunks,
-            Err(e) => return error::internal_server_error(e.to_string()),
+            Err(e) => {
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
         }
     };
 
     // compute embeddings for chunks
     let embedding_response = {
-        print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
-
         // get the name of embedding model
         let model = match llama_core::utils::embedding_model_names() {
             Ok(model_names) => model_names[0].clone(),
             Err(e) => {
-                return error::internal_server_error(e.to_string());
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         };
+
+        info!(target: "doc_to_embeddings_handler", "Prepare the rag embedding request.");
+
         // create an embedding request
         let embedding_request = EmbeddingRequest {
             model,
@@ -1021,17 +1323,15 @@ pub(crate) async fn doc_to_embeddings(
             user: None,
         };
 
-        // let qdrant_config = match QDRANT_CONFIG.get() {
-        //     Some(qdrant_config) => qdrant_config,
-        //     None => {
-        //         return error::internal_server_error("The Qdrant config is not set.");
-        //     }
-        // };
-
         let server_info = match SERVER_INFO.get() {
             Some(server_info) => server_info,
             None => {
-                return error::internal_server_error("The server info is not set.");
+                let err_msg = "The server info is not set.";
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         };
 
@@ -1042,19 +1342,21 @@ pub(crate) async fn doc_to_embeddings(
             server_info.qdrant_config.collection_name.clone(),
         );
 
-        let embedding_response =
-            match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
-                Ok(embedding_response) => embedding_response,
-                Err(e) => return error::internal_server_error(e.to_string()),
-            };
+        match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
+            Ok(embedding_response) => embedding_response,
+            Err(e) => {
+                let err_msg = e.to_string();
 
-        print_log_begin_separator("RAG (Embeddings for chunks)", Some("*"), None);
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
 
-        embedding_response
+                return error::internal_server_error(err_msg);
+            }
+        }
     };
 
     // serialize embedding response
-    match serde_json::to_string(&embedding_response) {
+    let res = match serde_json::to_string(&embedding_response) {
         Ok(s) => {
             // return response
             let result = Response::builder()
@@ -1064,21 +1366,45 @@ pub(crate) async fn doc_to_embeddings(
                 .header("Content-Type", "application/json")
                 .body(Body::from(s));
             match result {
-                Ok(response) => Ok(response),
-                Err(e) => error::internal_server_error(e.to_string()),
+                Ok(response) => response,
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                    error::internal_server_error(err_msg)
+                }
             }
         }
         Err(e) => {
-            error::internal_server_error(format!("Fail to serialize embedding object. {}", e))
+            let err_msg = format!("Fail to serialize embedding object. {}", e);
+
+            // log
+            error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
         }
-    }
+    };
+
+    info!(target: "doc_to_embeddings_handler", "Send the doc_to_embeddings response.");
+
+    res
 }
 
-pub(crate) async fn server_info() -> Result<Response<Body>, hyper::Error> {
+pub(crate) async fn server_info_handler() -> Response<Body> {
+    // log
+    info!(target: "server_info", "Handling the coming server info request.");
+
     // get the server info
     let server_info = match SERVER_INFO.get() {
         Some(server_info) => server_info,
         None => {
+            let err_msg = "The server info is not set.";
+
+            // log
+            error!(target: "server_info_handler", "{}", &err_msg);
+
             return error::internal_server_error("The server info is not set.");
         }
     };
@@ -1087,7 +1413,12 @@ pub(crate) async fn server_info() -> Result<Response<Body>, hyper::Error> {
     let s = match serde_json::to_string(&server_info) {
         Ok(s) => s,
         Err(e) => {
-            return error::internal_server_error(format!("Fail to serialize server info. {}", e));
+            let err_msg = format!("Fail to serialize server info. {}", e);
+
+            // log
+            error!(target: "server_info_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
@@ -1098,15 +1429,27 @@ pub(crate) async fn server_info() -> Result<Response<Body>, hyper::Error> {
         .header("Access-Control-Allow-Headers", "*")
         .header("Content-Type", "application/json")
         .body(Body::from(s));
-    match result {
-        Ok(response) => Ok(response),
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
+    let res = match result {
+        Ok(response) => response,
+        Err(e) => {
+            let err_msg = e.to_string();
+
+            // log
+            error!(target: "server_info_handler", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
+        }
+    };
+
+    info!(target: "server_info", "Send the server info response.");
+
+    res
 }
 
-pub(crate) async fn retrieve_handler(
-    mut req: Request<Body>,
-) -> Result<Response<Body>, hyper::Error> {
+pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
+    // log
+    info!(target: "retrieve_handler", "Handling the coming retrieve request.");
+
     if req.method().eq(&hyper::http::Method::OPTIONS) {
         let result = Response::builder()
             .header("Access-Control-Allow-Origin", "*")
@@ -1116,22 +1459,44 @@ pub(crate) async fn retrieve_handler(
             .body(Body::empty());
 
         match result {
-            Ok(response) => return Ok(response),
+            Ok(response) => return response,
             Err(e) => {
-                return error::internal_server_error(e.to_string());
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "retrieve_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
             }
         }
     }
 
+    info!(target: "rag_query_handler", "Prepare the chat completion request.");
+
     // parse request
-    let body_bytes = to_bytes(req.body_mut()).await?;
+    let body_bytes = match to_bytes(req.body_mut()).await {
+        Ok(body_bytes) => body_bytes,
+        Err(e) => {
+            let err_msg = format!("Fail to read buffer from request body. {}", e);
+
+            // log
+            error!(target: "retrieve_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
+    };
     let mut chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
         Ok(chat_request) => chat_request,
         Err(e) => {
-            return error::bad_request(format!(
-                "Fail to parse chat completion request: {msg}",
+            let err_msg = format!(
+                "Fail to deserialize chat completion request: {msg}",
                 msg = e
-            ));
+            );
+
+            // log
+            error!(target: "retrieve_handler", "{}", &err_msg);
+
+            return error::bad_request(err_msg);
         }
     };
 
@@ -1140,18 +1505,33 @@ pub(crate) async fn retrieve_handler(
     };
     let id = chat_request.user.clone().unwrap();
 
+    // log user id
+    info!(target: "retrieve_handler", "user: {}", &id);
+
     let server_info = match SERVER_INFO.get() {
         Some(server_info) => server_info,
         None => {
-            return error::internal_server_error("The server info is not set.");
+            let err_msg = "The server info is not set.";
+
+            // log
+            error!(target: "retrieve_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     };
 
-    println!("\n[+] Computing embeddings for user query ...");
+    info!(target: "rag_query_handler", "Compute embeddings for user query.");
 
     // * compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
-        true => return error::bad_request("Messages should not be empty"),
+        true => {
+            let err_msg = "Messages should not be empty.";
+
+            // log
+            error!(target: "retrieve_handler", "{}", &err_msg);
+
+            return error::bad_request(err_msg);
+        }
         false => {
             let last_message = chat_request.messages.last().unwrap();
             match last_message {
@@ -1159,18 +1539,29 @@ pub(crate) async fn retrieve_handler(
                     let query_text = match user_message.content() {
                         ChatCompletionUserMessageContent::Text(text) => text,
                         _ => {
-                            return error::bad_request(
-                                "The last message must be a text content user message",
-                            )
+                            let err_msg = "The last message must be a text content user message";
+
+                            // log
+                            error!(target: "retrieve_handler", "{}", &err_msg);
+
+                            return error::bad_request(err_msg);
                         }
                     };
 
-                    println!("    * user query: {}\n", query_text);
+                    // log
+                    info!(target: "retrieve_handler", "query_text: {}", query_text);
 
                     // get the available embedding models
                     let embedding_model_names = match llama_core::utils::embedding_model_names() {
                         Ok(model_names) => model_names,
-                        Err(e) => return error::internal_server_error(e.to_string()),
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "retrieve_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
                     };
 
                     // create a embedding request
@@ -1180,10 +1571,6 @@ pub(crate) async fn retrieve_handler(
                         encoding_format: None,
                         user: chat_request.user.clone(),
                     };
-
-                    if let Ok(request_str) = serde_json::to_string_pretty(&embedding_request) {
-                        println!("    * embedding request (json):\n\n{}", request_str);
-                    }
 
                     let rag_embedding_request = RagEmbeddingRequest {
                         embedding_request,
@@ -1195,23 +1582,40 @@ pub(crate) async fn retrieve_handler(
                     match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
                         Ok(embedding_response) => embedding_response,
                         Err(e) => {
-                            return error::internal_server_error(e.to_string());
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "retrieve_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
                         }
                     }
                 }
-                _ => return error::bad_request("The last message must be a user message"),
+                _ => {
+                    let err_msg = "The last message must be a user message";
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    return error::bad_request(err_msg);
+                }
             }
         }
     };
     let query_embedding: Vec<f32> = match embedding_response.data.first() {
         Some(embedding) => embedding.embedding.iter().map(|x| *x as f32).collect(),
-        None => return error::internal_server_error("No embeddings returned"),
+        None => {
+            let err_msg = "No embeddings returned";
+
+            // log
+            error!(target: "retrieve_handler", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
     };
 
-    println!("\n[+] Retrieving context ...");
-
     // * retrieve context
-    match llama_core::rag::rag_retrieve_context(
+    let res = match llama_core::rag::rag_retrieve_context(
         query_embedding.as_slice(),
         server_info.qdrant_config.url.to_string().as_str(),
         server_info.qdrant_config.collection_name.as_str(),
@@ -1220,19 +1624,17 @@ pub(crate) async fn retrieve_handler(
     )
     .await
     {
-        Ok(retrieve_object) => {
-            if let Some(points) = &retrieve_object.points {
-                println!("    * {} point(s) retrieved", points.len())
-            }
-
+        Ok(ro) => {
             // serialize retrieve object
-            let s = match serde_json::to_string(&retrieve_object) {
+            let s = match serde_json::to_string(&ro) {
                 Ok(s) => s,
                 Err(e) => {
-                    return error::internal_server_error(format!(
-                        "Fail to serialize retrieve object. {}",
-                        e
-                    ));
+                    let err_msg = format!("Fail to serialize retrieve object. {}", e);
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
                 }
             };
 
@@ -1246,10 +1648,64 @@ pub(crate) async fn retrieve_handler(
                 .body(Body::from(s));
 
             match result {
-                Ok(response) => Ok(response),
-                Err(e) => error::internal_server_error(e.to_string()),
+                Ok(response) => response,
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    error::internal_server_error(e.to_string())
+                }
             }
         }
-        Err(e) => error::internal_server_error(e.to_string()),
-    }
+        Err(e) => {
+            // log
+            error!(target: "retrieve_handler", "{}", e);
+
+            let ro = RetrieveObject {
+                points: None,
+                limit: server_info.qdrant_config.limit as usize,
+                score_threshold: server_info.qdrant_config.score_threshold,
+            };
+
+            // serialize retrieve object
+            let s = match serde_json::to_string(&ro) {
+                Ok(s) => s,
+                Err(e) => {
+                    let err_msg = format!("Fail to serialize retrieve object. {}", e);
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
+                }
+            };
+
+            // return response
+            let result = Response::builder()
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Access-Control-Allow-Methods", "*")
+                .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
+                .header("user", id)
+                .body(Body::from(s));
+
+            match result {
+                Ok(response) => response,
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "retrieve_handler", "{}", &err_msg);
+
+                    error::internal_server_error(e.to_string())
+                }
+            }
+        }
+    };
+
+    info!(target: "retrieve_handler", "Send the retrieve response.");
+
+    res
 }

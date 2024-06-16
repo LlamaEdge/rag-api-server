@@ -217,7 +217,6 @@ async fn main() -> Result<(), ServerError> {
 
         return Err(ServerError::ArgumentError(err_msg));
     }
-
     if !qdrant_up(&cli.qdrant_url).await {
         let err_msg = format!("[INFO] Qdrant not found at: {}", &cli.qdrant_url);
         error!(target: "server_config", "qdrant_url: {}", err_msg);
