@@ -24,21 +24,21 @@ jobs:
         id: rustup
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: wasm32-wasi
+          target: wasm32-wasip1
 
       - name: Build rag-api-server
         id: build_rag_api_server
         run: |
           cargo clean
-          cargo build --target wasm32-wasi --release
-          cp target/wasm32-wasi/release/rag-api-server.wasm rag-api-server.wasm
+          cargo build --target wasm32-wasip1 --release
+          cp target/wasm32-wasip1/release/rag-api-server.wasm rag-api-server.wasm
 
       - name: Build rag-api-server-full
         id: build_rag_api_server_full
         run: |
           cargo clean
-          cargo build --target wasm32-wasi --release --features full
-          cp target/wasm32-wasi/release/rag-api-server.wasm rag-api-server-full.wasm
+          cargo build --target wasm32-wasip1 --release --features full
+          cp target/wasm32-wasip1/release/rag-api-server.wasm rag-api-server-full.wasm
 
       - name: Calculate checksum
         id: checksum
