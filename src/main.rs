@@ -20,7 +20,7 @@ use llama_core::MetadataBuilder;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
-use utils::{is_valid_url, LogLevel};
+use utils::{is_valid_url, qdrant_up, LogLevel};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
@@ -212,11 +212,19 @@ async fn main() -> Result<(), ServerError> {
 
         // log
         {
-            error!(target: "server_config", "rag_prompt: {}", err_msg);
+            error!(target: "server_config", "qdrant_url: {}", err_msg);
         }
 
         return Err(ServerError::ArgumentError(err_msg));
     }
+    if !qdrant_up(&cli.qdrant_url).await {
+        let err_msg = format!("[INFO] Qdrant not found at: {}", &cli.qdrant_url);
+        error!(target: "server_config", "qdrant_url: {}", err_msg);
+
+        return Err(ServerError::DatabaseError(err_msg));
+    }
+
+    // log qdrant url
     info!(target: "server_config", "qdrant_url: {}", &cli.qdrant_url);
 
     // log qdrant collection name

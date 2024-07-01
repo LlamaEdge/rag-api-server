@@ -1,8 +1,19 @@
+use hyper::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub(crate) fn is_valid_url(url: &str) -> bool {
     Url::parse(url).is_ok()
+}
+
+//TODO: check json title field to check whether running service is really qdrant
+pub(crate) async fn qdrant_up(url: &str) -> bool {
+    let client = Client::new();
+
+    match client.get(url.parse().unwrap()).await {
+        Ok(res) => res.status().is_success(),
+        Err(_) => false,
+    }
 }
 
 pub(crate) fn gen_chat_id() -> String {
