@@ -311,9 +311,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00ff99ad09aca014de8b75a2bdf2d59b305bf3149787ee2fbf6dd869c3bbbf4e"
+checksum = "6e83d34f91f885a01f0cda64b5c7842b2c8f48aefb90a7fd03f4f25d78c8549b"
 dependencies = [
  "base64 0.22.0",
  "clap",
@@ -490,9 +490,9 @@ dependencies = [
 
 [[package]]
 name = "endpoints"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9a51547bace9eddeb42514b2a0393edaf765606490cf267b708030237b3dc5"
+checksum = "14b2d111d8166c6fe0822600311191cfe86520f26350c2a6d953da9889c66ae3"
 dependencies = [
  "indexmap 2.2.6",
  "serde",
@@ -1122,9 +1122,9 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
 name = "llama-core"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fc11b42ca355dfd20f3e3a3b848e2063ebe98324c787654340c0fb6a932c442"
+checksum = "5a763029cf6d081401efa1fca40af4c36f4025b52cf2f2a28f37de41691e2f1d"
 dependencies = [
  "chat-prompts",
  "either",
@@ -1665,6 +1665,7 @@ dependencies = [
  "tokio_wasi",
  "url 2.5.0",
  "uuid",
+ "walkdir",
  "wasi-logger",
 ]
 
@@ -1999,6 +2000,15 @@ name = "safemem"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
+
+[[package]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+dependencies = [
+ "winapi-util",
+]
 
 [[package]]
 name = "scopeguard"
@@ -2733,6 +2743,16 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "walkdir"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+dependencies = [
+ "same-file",
+ "winapi-util",
+]
 
 [[package]]
 name = "want"
