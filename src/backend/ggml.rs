@@ -3,7 +3,7 @@ use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPo
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::EmbeddingRequest,
-    files::FileObject,
+    files::{DeleteFileStatus, FileObject, ListFilesResponse},
     rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest, RetrieveObject},
 };
 use futures_util::TryStreamExt;
@@ -16,6 +16,7 @@ use std::{
     path::Path,
     time::SystemTime,
 };
+use walkdir::{DirEntry, WalkDir};
 
 /// List all models available.
 pub(crate) async fn models_handler() -> Response<Body> {
@@ -70,122 +71,6 @@ pub(crate) async fn models_handler() -> Response<Body> {
     info!(target: "models_handler", "Send the model list response.");
 
     res
-}
-
-/// Process a chat-completion request in stream mode and returns a chat-completion response with the answer from the model.
-async fn chat_completions_stream(mut chat_request: ChatCompletionRequest) -> Response<Body> {
-    info!(target: "chat_completions_stream", "Process the chat completions in stream mode.");
-
-    if chat_request.user.is_none() {
-        chat_request.user = Some(gen_chat_id())
-    };
-    let id = chat_request.user.clone().unwrap();
-
-    // log user id
-    info!(target: "chat_completions_stream", "user: {}", &id);
-
-    match llama_core::chat::chat_completions_stream(&mut chat_request).await {
-        Ok(stream) => {
-            let stream = stream.map_err(|e| e.to_string());
-
-            let result = Response::builder()
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .header("Content-Type", "text/event-stream")
-                .header("Cache-Control", "no-cache")
-                .header("Connection", "keep-alive")
-                .header("user", id)
-                .body(Body::wrap_stream(stream));
-
-            match result {
-                Ok(response) => {
-                    // log
-                    info!(target: "chat_completions_stream", "finish chat completions in stream mode");
-
-                    response
-                }
-                Err(e) => {
-                    let err_msg = format!("Failed chat completions in stream mode. Reason: {}", e);
-
-                    // log
-                    error!(target: "chat_completions_stream", "{}", &err_msg);
-
-                    error::internal_server_error(err_msg)
-                }
-            }
-        }
-        Err(e) => {
-            let err_msg = format!("Failed chat completions in stream mode. Reason: {}", e);
-
-            // log
-            error!(target: "chat_completions_stream", "{}", &err_msg);
-
-            error::internal_server_error(err_msg)
-        }
-    }
-}
-
-/// Process a chat-completion request and returns a chat-completion response with the answer from the model.
-async fn chat_completions(mut chat_request: ChatCompletionRequest) -> Response<Body> {
-    info!(target: "chat_completions", "Process the chat completions request in non-stream mode.");
-
-    if chat_request.user.is_none() {
-        chat_request.user = Some(gen_chat_id())
-    };
-    let id = chat_request.user.clone().unwrap();
-
-    match llama_core::chat::chat_completions(&mut chat_request).await {
-        Ok(chat_completion_object) => {
-            // serialize chat completion object
-            let s = match serde_json::to_string(&chat_completion_object) {
-                Ok(s) => s,
-                Err(e) => {
-                    let err_msg = format!("Failed to serialize chat completion object. {}", e);
-
-                    // log
-                    error!(target: "chat_completions", "{}", &err_msg);
-
-                    return error::internal_server_error(err_msg);
-                }
-            };
-
-            // return response
-            let result = Response::builder()
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .header("Content-Type", "application/json")
-                .header("user", id)
-                .body(Body::from(s));
-
-            match result {
-                Ok(response) => {
-                    // log
-                    info!(target: "chat_completions", "finish chat completions in non-stream mode");
-
-                    response
-                }
-                Err(e) => {
-                    let err_msg =
-                        format!("Failed chat completions in non-stream mode. Reason: {}", e);
-
-                    // log
-                    error!(target: "chat_completions", "{}", &err_msg);
-
-                    error::internal_server_error(err_msg)
-                }
-            }
-        }
-        Err(e) => {
-            let err_msg = e.to_string();
-
-            // log
-            error!(target: "chat_completions", "{}", &err_msg);
-
-            error::internal_server_error(err_msg)
-        }
-    }
 }
 
 /// Compute embeddings for the input text and return the embeddings object.
@@ -336,9 +221,10 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     if chat_request.user.is_none() {
         chat_request.user = Some(gen_chat_id())
     };
+    let id = chat_request.user.clone().unwrap();
 
     // log user id
-    info!(target: "rag_query_handler", "user: {}", chat_request.user.clone().unwrap());
+    info!(target: "rag_query_handler", "user: {}", &id);
 
     let server_info = match SERVER_INFO.get() {
         Some(server_info) => server_info,
@@ -533,9 +419,89 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     }
 
     // chat completion
-    let res = match chat_request.stream {
-        Some(true) => chat_completions_stream(chat_request).await,
-        Some(false) | None => chat_completions(chat_request).await,
+    let res = match llama_core::chat::chat(&mut chat_request).await {
+        Ok(result) => match result {
+            either::Left(stream) => {
+                let stream = stream.map_err(|e| e.to_string());
+
+                let result = Response::builder()
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header("Access-Control-Allow-Methods", "*")
+                    .header("Access-Control-Allow-Headers", "*")
+                    .header("Content-Type", "text/event-stream")
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "keep-alive")
+                    .header("user", id)
+                    .body(Body::wrap_stream(stream));
+
+                match result {
+                    Ok(response) => {
+                        // log
+                        info!(target: "chat_completions_stream", "finish chat completions in stream mode");
+
+                        response
+                    }
+                    Err(e) => {
+                        let err_msg =
+                            format!("Failed chat completions in stream mode. Reason: {}", e);
+
+                        // log
+                        error!(target: "chat_completions_stream", "{}", &err_msg);
+
+                        error::internal_server_error(err_msg)
+                    }
+                }
+            }
+            either::Right(chat_completion_object) => {
+                // serialize chat completion object
+                let s = match serde_json::to_string(&chat_completion_object) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let err_msg = format!("Failed to serialize chat completion object. {}", e);
+
+                        // log
+                        error!(target: "chat_completions", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                };
+
+                // return response
+                let result = Response::builder()
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header("Access-Control-Allow-Methods", "*")
+                    .header("Access-Control-Allow-Headers", "*")
+                    .header("Content-Type", "application/json")
+                    .header("user", id)
+                    .body(Body::from(s));
+
+                match result {
+                    Ok(response) => {
+                        // log
+                        info!(target: "chat_completions", "Finish chat completions in non-stream mode");
+
+                        response
+                    }
+                    Err(e) => {
+                        let err_msg =
+                            format!("Failed chat completions in non-stream mode. Reason: {}", e);
+
+                        // log
+                        error!(target: "chat_completions", "{}", &err_msg);
+
+                        error::internal_server_error(err_msg)
+                    }
+                }
+            }
+        },
+        Err(e) => {
+            let err_msg = format!("Failed to get chat completions. Reason: {}", e);
+
+            // log
+            error!(target: "chat_completions_handler", "{}", &err_msg);
+
+            error::internal_server_error(err_msg)
+        }
     };
 
     // log
@@ -736,6 +702,7 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
 
                 if !((filename).to_lowercase().ends_with(".txt")
                     || (filename).to_lowercase().ends_with(".md"))
+                    || (filename).to_lowercase().ends_with(".png")
                 {
                     let err_msg = format!(
                         "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported. The file extension is {}.",
@@ -764,9 +731,6 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
                 // create a unique file id
                 let id = format!("file_{}", uuid::Uuid::new_v4());
 
-                // log
-                info!(target: "files_handler", "file_id: {}, file_name: {}", &id, &filename);
-
                 // save the file
                 let path = Path::new("archives");
                 if !path.exists() {
@@ -789,6 +753,9 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
                     }
                 };
                 file.write_all(&buffer[..]).unwrap();
+
+                // log
+                info!(target: "files_handler", "file_id: {}, file_name: {}", &id, &filename);
 
                 let created_at = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
                     Ok(n) => n.as_secs(),
@@ -861,12 +828,242 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
             }
         }
     } else if req.method() == Method::GET {
-        let err_msg = "Not implemented for listing files.";
+        let uri_path = req.uri().path();
 
-        // log
-        error!(target: "files_handler", "{}", &err_msg);
+        if uri_path == "/v1/files" {
+            let mut file_objects: Vec<FileObject> = Vec::new();
+            for entry in WalkDir::new("archives").into_iter().filter_map(|e| e.ok()) {
+                if !is_hidden(&entry) && entry.path().is_file() {
+                    info!(target: "files_handler", "archive file: {}", entry.path().display());
 
-        error::internal_server_error(err_msg)
+                    let id = entry
+                        .path()
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+
+                    let filename = entry
+                        .path()
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap()
+                        .to_string();
+
+                    let metadata = entry.path().metadata().unwrap();
+
+                    let created_at = metadata
+                        .created()
+                        .unwrap()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+
+                    let bytes = metadata.len();
+
+                    let fo = FileObject {
+                        id,
+                        bytes,
+                        created_at,
+                        filename,
+                        object: "file".to_string(),
+                        purpose: "assistants".to_string(),
+                    };
+
+                    file_objects.push(fo);
+                }
+            }
+
+            info!(target: "files_handler", "Found {} archive files", file_objects.len());
+
+            let file_objects = ListFilesResponse {
+                object: "list".to_string(),
+                data: file_objects,
+            };
+
+            // serialize chat completion object
+            let s = match serde_json::to_string(&file_objects) {
+                Ok(s) => s,
+                Err(e) => {
+                    let err_msg = format!("Failed to serialize file object. {}", e);
+
+                    // log
+                    error!(target: "files_handler", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
+                }
+            };
+
+            // return response
+            let result = Response::builder()
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Access-Control-Allow-Methods", "*")
+                .header("Access-Control-Allow-Headers", "*")
+                .header("Content-Type", "application/json")
+                .body(Body::from(s));
+
+            match result {
+                Ok(response) => response,
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "files_handler", "{}", &err_msg);
+
+                    error::internal_server_error(err_msg)
+                }
+            }
+        } else {
+            let id = uri_path.trim_start_matches("/v1/files/");
+            let root = format!("archives/{}", id);
+            let mut file_object: Option<FileObject> = None;
+            for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+                if !is_hidden(&entry) && entry.path().is_file() {
+                    info!(target: "files_handler", "archive file: {}", entry.path().display());
+
+                    let filename = entry
+                        .path()
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap()
+                        .to_string();
+
+                    let metadata = entry.path().metadata().unwrap();
+
+                    let created_at = metadata
+                        .created()
+                        .unwrap()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+
+                    let bytes = metadata.len();
+
+                    file_object = Some(FileObject {
+                        id: id.into(),
+                        bytes,
+                        created_at,
+                        filename,
+                        object: "file".to_string(),
+                        purpose: "assistants".to_string(),
+                    });
+
+                    break;
+                }
+            }
+
+            match file_object {
+                Some(fo) => {
+                    // serialize chat completion object
+                    let s = match serde_json::to_string(&fo) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let err_msg = format!("Failed to serialize file object. {}", e);
+
+                            // log
+                            error!(target: "files_handler", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    };
+
+                    // return response
+                    let result = Response::builder()
+                        .header("Access-Control-Allow-Origin", "*")
+                        .header("Access-Control-Allow-Methods", "*")
+                        .header("Access-Control-Allow-Headers", "*")
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(s));
+
+                    match result {
+                        Ok(response) => response,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "files_handler", "{}", &err_msg);
+
+                            error::internal_server_error(err_msg)
+                        }
+                    }
+                }
+                None => {
+                    let err_msg = format!(
+                        "Failed to retrieve the target file. Not found the target file with id {}.",
+                        id
+                    );
+
+                    // log
+                    error!(target: "files_handler", "{}", &err_msg);
+
+                    error::internal_server_error(err_msg)
+                }
+            }
+        }
+    } else if req.method() == Method::DELETE {
+        let id = req.uri().path().trim_start_matches("/v1/files/");
+        let root = format!("archives/{}", id);
+        let status = match fs::remove_dir_all(root) {
+            Ok(_) => {
+                info!(target: "files_handler", "Successfully deleted the target file with id {}.", id);
+
+                DeleteFileStatus {
+                    id: id.into(),
+                    object: "file".to_string(),
+                    deleted: true,
+                }
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to delete the target file with id {}. {}", id, e);
+
+                // log
+                error!(target: "files_handler", "{}", &err_msg);
+
+                DeleteFileStatus {
+                    id: id.into(),
+                    object: "file".to_string(),
+                    deleted: false,
+                }
+            }
+        };
+
+        // serialize status
+        let s = match serde_json::to_string(&status) {
+            Ok(s) => s,
+            Err(e) => {
+                let err_msg = format!(
+                    "Failed to serialize the status of the file deletion operation. {}",
+                    e
+                );
+
+                // log
+                error!(target: "files_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        // return response
+        let result = Response::builder()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "*")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
+            .body(Body::from(s));
+
+        match result {
+            Ok(response) => response,
+            Err(e) => {
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "files_handler", "{}", &err_msg);
+
+                error::internal_server_error(err_msg)
+            }
+        }
     } else {
         let err_msg = "Invalid HTTP Method.";
 
@@ -1708,4 +1905,12 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     info!(target: "retrieve_handler", "Send the retrieve response.");
 
     res
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
 }

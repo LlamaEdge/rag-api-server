@@ -311,9 +311,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.8.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c34c98b57e6ee76dc6ee13d4883bcf48d2197a62d3aee25cbd6398fd5c8a970c"
+checksum = "6e83d34f91f885a01f0cda64b5c7842b2c8f48aefb90a7fd03f4f25d78c8549b"
 dependencies = [
  "base64 0.22.0",
  "clap",
@@ -475,9 +475,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.11.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a47c1c47d2f5964e29c61246e81db715514cd532db6b5116a25ea3c03d6780a2"
+checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
 
 [[package]]
 name = "encoding_rs"
@@ -490,9 +490,9 @@ dependencies = [
 
 [[package]]
 name = "endpoints"
-version = "0.9.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58f836dac069070326c3c723c8f964292363fbab47e4f375b96ae2b7f7e894be"
+checksum = "14b2d111d8166c6fe0822600311191cfe86520f26350c2a6d953da9889c66ae3"
 dependencies = [
  "indexmap 2.2.6",
  "serde",
@@ -1122,17 +1122,19 @@ checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
 name = "llama-core"
-version = "0.11.3"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a18b6d82fdc9f5251739fa9f29cc6f877b8fbed4f32522125c37ac35b513da76"
+checksum = "5a763029cf6d081401efa1fca40af4c36f4025b52cf2f2a28f37de41691e2f1d"
 dependencies = [
  "chat-prompts",
+ "either",
  "endpoints",
  "futures",
  "futures-util",
  "log 0.4.21",
  "once_cell",
  "qdrant_rest_client",
+ "regex",
  "reqwest_wasi",
  "serde",
  "serde_json",
@@ -1640,12 +1642,13 @@ dependencies = [
 
 [[package]]
 name = "rag-api-server"
-version = "0.7.0"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "chat-prompts",
  "chrono",
  "clap",
+ "either",
  "endpoints",
  "futures",
  "futures-util",
@@ -1662,6 +1665,7 @@ dependencies = [
  "tokio_wasi",
  "url 2.5.0",
  "uuid",
+ "walkdir",
  "wasi-logger",
 ]
 
@@ -1996,6 +2000,15 @@ name = "safemem"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
+
+[[package]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+dependencies = [
+ "winapi-util",
+]
 
 [[package]]
 name = "scopeguard"
@@ -2732,6 +2745,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
+name = "walkdir"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+dependencies = [
+ "same-file",
+ "winapi-util",
+]
+
+[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2868,9 +2891,9 @@ dependencies = [
 
 [[package]]
 name = "wasmedge-wasi-nn"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c88608757402e38784c8fb8644a1c8e5bff10844163f3cf0314c1c7d42336cc"
+checksum = "134a8d0feed511e17f1f11a460e7a5fe2303948521cecd8135d40f90e4cfa9d6"
 dependencies = [
  "thiserror",
 ]

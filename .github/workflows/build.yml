@@ -43,24 +43,24 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
-          target: wasm32-wasi
+          target: wasm32-wasip1
           components: rustfmt, clippy
 
       - name: Install Rust-stable
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: wasm32-wasi
+          target: wasm32-wasip1
 
       - name: Build rag-api-server
         id: build_rag_api_server
         run: |
           cargo +nightly fmt --all -- --check
-          cargo +nightly clippy --target wasm32-wasi -- -D warnings
-          cargo build --target wasm32-wasi --release
+          cargo +nightly clippy --target wasm32-wasip1 -- -D warnings
+          cargo build --target wasm32-wasip1 --release
 
       - name: Build rag-api-server-full
         id: build_rag_api_server_full
         run: |
           cargo +nightly fmt --all -- --check
-          cargo +nightly clippy --target wasm32-wasi --features full -- -D warnings
-          cargo build --target wasm32-wasi --release --features full
+          cargo +nightly clippy --target wasm32-wasip1 --features full -- -D warnings
+          cargo build --target wasm32-wasip1 --release --features full
