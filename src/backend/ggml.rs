@@ -555,33 +555,18 @@ impl MergeRagContext for RagPromptBuilder {
 
                 match &messages[0] {
                     ChatCompletionRequestMessage::System(message) => {
-                        let system_message = match GLOBAL_RAG_PROMPT.get() {
-                            Some(global_rag_prompt) => {
-                                // compose new system message content
-                                let content = format!(
-                                    "{rag_prompt}\n{context}",
-                                    rag_prompt = global_rag_prompt.to_owned(),
-                                    context = context.trim_end()
-                                );
-                                // create system message
-                                ChatCompletionRequestMessage::new_system_message(
-                                    content,
-                                    message.name().cloned(),
-                                )
-                            }
-                            None => {
-                                // compose new system message content
-                                let content = format!(
-                                    "{system_message}\n{context}",
-                                    system_message = message.content().trim(),
-                                    context = context.trim_end()
-                                );
-                                // create system message
-                                ChatCompletionRequestMessage::new_system_message(
-                                    content,
-                                    message.name().cloned(),
-                                )
-                            }
+                        let system_message = {
+                            // compose new system message content
+                            let content = format!(
+                                "{system_message}\n{context}",
+                                system_message = message.content().trim(),
+                                context = context.trim_end()
+                            );
+                            // create system message
+                            ChatCompletionRequestMessage::new_system_message(
+                                content,
+                                message.name().cloned(),
+                            )
                         };
 
                         // replace the original system message
