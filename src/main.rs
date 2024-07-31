@@ -66,6 +66,18 @@ struct Cli {
     /// Halt generation at PROMPT, return control.
     #[arg(short, long)]
     reverse_prompt: Option<String>,
+    /// Number of tokens to predict
+    #[arg(short, long, default_value = "1024")]
+    n_predict: u64,
+    /// Number of layers to run on the GPU
+    #[arg(short = 'g', long, default_value = "100")]
+    n_gpu_layers: u64,
+    /// The main GPU to use.
+    #[arg(long, requires = "tensor_split")]
+    main_gpu: Option<u64>,
+    /// How split tensors should be distributed accross GPUs. If None the model is not split; otherwise, a comma-separated list of non-negative values, e.g., "3,2" presents 60% of the data to GPU 0 and 40% to GPU 1.
+    #[arg(long, requires = "main_gpu")]
+    tensor_split: Option<String>,
     /// Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model.
     #[arg(short, long, value_delimiter = ',', default_value = "512,512", value_parser = clap::value_parser!(u64))]
     batch_size: Vec<u64>,
@@ -194,6 +206,22 @@ async fn main() -> Result<(), ServerError> {
         info!(target: "server_config", "reverse_prompt: {}", reverse_prompt);
     }
 
+    // log n_predict
+    info!(target: "server_config", "n_predict: {}", &cli.n_predict);
+
+    // log n_gpu_layers
+    info!(target: "server_config", "n_gpu_layers: {}", &cli.n_gpu_layers);
+
+    // log main GPU
+    if let Some(main_gpu) = &cli.main_gpu {
+        info!(target: "server_config", "main_gpu: {}", main_gpu);
+    }
+
+    // log tensor split
+    if let Some(tensor_split) = &cli.tensor_split {
+        info!(target: "server_config", "tensor_split: {}", tensor_split);
+    }
+
     // log rag prompt
     if let Some(rag_prompt) = &cli.rag_prompt {
         info!(target: "server_config", "rag_prompt: {}", rag_prompt);
@@ -259,6 +287,10 @@ async fn main() -> Result<(), ServerError> {
     .with_ctx_size(cli.ctx_size[0])
     .with_reverse_prompt(cli.reverse_prompt)
     .with_batch_size(cli.batch_size[0])
+    .with_n_predict(cli.n_predict)
+    .with_n_gpu_layers(cli.n_gpu_layers)
+    .with_main_gpu(cli.main_gpu)
+    .with_tensor_split(cli.tensor_split)
     .enable_plugin_log(true)
     .enable_debug_log(plugin_debug)
     .build();

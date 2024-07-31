@@ -468,46 +468,54 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
   Usage: rag-api-server.wasm [OPTIONS] --model-name <MODEL_NAME> --prompt-template <PROMPT_TEMPLATE>
 
   Options:
-    -m, --model-name <MODEL_NAME>
-            Sets names for chat and embedding models. The names are separated by comma without space, for example, '--model-name Llama-2-7b,all-minilm'
-    -a, --model-alias <MODEL_ALIAS>
-            Model aliases for chat and embedding models [default: default,embedding]
-    -c, --ctx-size <CTX_SIZE>
-            Sets context sizes for chat and embedding models. The sizes are separated by comma without space, for example, '--ctx-size 4096,384'. The first value is for the chat model, and the second is for the embedding model [default: 4096,384]
-    -p, --prompt-template <PROMPT_TEMPLATE>
-            Prompt template [possible values: llama-2-chat, llama-3-chat, mistral-instruct, mistrallite, openchat, codellama-instruct, codellama-super-instruct, human-assistant, vicuna-1.0-chat, vicuna-1.1-chat, vicuna-llava, chatml, baichuan-2, wizard-coder, zephyr, stablelm-zephyr, intel-neural, deepseek-chat, deepseek-coder, solar-instruct, phi-2-chat, phi-2-instruct, phi-3-chat, phi-3-instruct, gemma-instruct, octopus]
-    -r, --reverse-prompt <REVERSE_PROMPT>
-            Halt generation at PROMPT, return control
-    -b, --batch-size <BATCH_SIZE>
-            Batch size for prompt processing [default: 512]
-        --rag-prompt <RAG_PROMPT>
-            Custom rag prompt
-        --rag-policy <POLICY>
-            Strategy for merging RAG context into chat messages [default: system-message] [possible values: system-message, last-user-message]
-        --qdrant-url <QDRANT_URL>
-            URL of Qdrant REST Service [default: http://localhost:6333]
-        --qdrant-collection-name <QDRANT_COLLECTION_NAME>
-            Name of Qdrant collection [default: default]
-        --qdrant-limit <QDRANT_LIMIT>
-            Max number of retrieved result (no less than 1) [default: 5]
-        --qdrant-score-threshold <QDRANT_SCORE_THRESHOLD>
-            Minimal score threshold for the search result [default: 0.4]
-        --chunk-capacity <CHUNK_CAPACITY>
-            Maximum number of tokens each chunk contains [default: 100]
-        --log-prompts
-            Print prompt strings to stdout
-        --log-stat
-            Print statistics to stdout
-        --log-all
-            Print all log information to stdout
-        --socket-addr <SOCKET_ADDR>
-            Socket address of LlamaEdge API Server instance [default: 0.0.0.0:8080]
-        --web-ui <WEB_UI>
-            Root path for the Web UI files [default: chatbot-ui]
-    -h, --help
-            Print help (see more with '--help')
-    -V, --version
-            Print version
+  -m, --model-name <MODEL_NAME>
+          Sets names for chat and embedding models. The names are separated by comma without space, for example, '--model-name Llama-2-7b,all-minilm'
+  -a, --model-alias <MODEL_ALIAS>
+          Model aliases for chat and embedding models [default: default,embedding]
+  -c, --ctx-size <CTX_SIZE>
+          Sets context sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--ctx-size 4096,384'. The first value is for the chat model, and the second is for the embedding model [default: 4096,384]
+  -p, --prompt-template <PROMPT_TEMPLATE>
+          Sets prompt templates for chat and embedding models, respectively. The prompt templates are separated by comma without space, for example, '--prompt-template llama-2-chat,embedding'. The first value is for the chat model, and the second is for the embedding model [possible values: llama-2-chat, llama-3-chat, llama-3-tool, mistral-instruct, mistral-tool, mistrallite, openchat, codellama-instruct, codellama-super-instruct, human-assistant, vicuna-1.0-chat, vicuna-1.1-chat, vicuna-llava, chatml, chatml-tool, internlm-2-tool, baichuan-2, wizard-coder, zephyr, stablelm-zephyr, intel-neural, deepseek-chat, deepseek-coder, deepseek-chat-2, solar-instruct, phi-2-chat, phi-2-instruct, phi-3-chat, phi-3-instruct, gemma-instruct, octopus, glm-4-chat, groq-llama3-tool, embedding]
+  -r, --reverse-prompt <REVERSE_PROMPT>
+          Halt generation at PROMPT, return control
+  -n, --n-predict <N_PREDICT>
+          Number of tokens to predict [default: 1024]
+  -g, --n-gpu-layers <N_GPU_LAYERS>
+          Number of layers to run on the GPU [default: 100]
+      --main-gpu <MAIN_GPU>
+          The main GPU to use
+      --tensor-split <TENSOR_SPLIT>
+          How split tensors should be distributed accross GPUs. If None the model is not split; otherwise, a comma-separated list of non-negative values, e.g., "3,2" presents 60% of the data to GPU 0 and 40% to GPU 1
+  -b, --batch-size <BATCH_SIZE>
+          Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model [default: 512,512]
+      --rag-prompt <RAG_PROMPT>
+          Custom rag prompt
+      --rag-policy <POLICY>
+          Strategy for merging RAG context into chat messages [default: system-message] [possible values: system-message, last-user-message]
+      --qdrant-url <QDRANT_URL>
+          URL of Qdrant REST Service [default: http://127.0.0.1:6333]
+      --qdrant-collection-name <QDRANT_COLLECTION_NAME>
+          Name of Qdrant collection [default: default]
+      --qdrant-limit <QDRANT_LIMIT>
+          Max number of retrieved result (no less than 1) [default: 5]
+      --qdrant-score-threshold <QDRANT_SCORE_THRESHOLD>
+          Minimal score threshold for the search result [default: 0.4]
+      --chunk-capacity <CHUNK_CAPACITY>
+          Maximum number of tokens each chunk contains [default: 100]
+      --socket-addr <SOCKET_ADDR>
+          Socket address of LlamaEdge API Server instance [default: 0.0.0.0:8080]
+      --web-ui <WEB_UI>
+          Root path for the Web UI files [default: chatbot-ui]
+      --log-prompts
+          Deprecated. Print prompt strings to stdout
+      --log-stat
+          Deprecated. Print statistics to stdout
+      --log-all
+          Deprecated. Print all log information to stdout
+  -h, --help
+          Print help (see more with '--help')
+  -V, --version
+          Print version
   ```
 
 </details>
