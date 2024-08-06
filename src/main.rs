@@ -73,10 +73,10 @@ struct Cli {
     #[arg(short = 'g', long, default_value = "100")]
     n_gpu_layers: u64,
     /// The main GPU to use.
-    #[arg(long, requires = "tensor_split")]
+    #[arg(long)]
     main_gpu: Option<u64>,
     /// How split tensors should be distributed accross GPUs. If None the model is not split; otherwise, a comma-separated list of non-negative values, e.g., "3,2" presents 60% of the data to GPU 0 and 40% to GPU 1.
-    #[arg(long, requires = "main_gpu")]
+    #[arg(long)]
     tensor_split: Option<String>,
     /// Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model.
     #[arg(short, long, value_delimiter = ',', default_value = "512,512", value_parser = clap::value_parser!(u64))]
