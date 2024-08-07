@@ -604,7 +604,7 @@ impl MergeRagContext for RagPromptBuilder {
                             }
                             None => {
                                 // compose new system message content
-                                let content = format!("{}", context.trim_end());
+                                let content = context.trim_end().to_string();
                                 // create system message
                                 ChatCompletionRequestMessage::new_system_message(content, None)
                             }
