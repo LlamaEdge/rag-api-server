@@ -556,17 +556,35 @@ impl MergeRagContext for RagPromptBuilder {
                 match &messages[0] {
                     ChatCompletionRequestMessage::System(message) => {
                         let system_message = {
-                            // compose new system message content
-                            let content = format!(
-                                "{system_message}\n{context}",
-                                system_message = message.content().trim(),
-                                context = context.trim_end()
-                            );
-                            // create system message
-                            ChatCompletionRequestMessage::new_system_message(
-                                content,
-                                message.name().cloned(),
-                            )
+                            match GLOBAL_RAG_PROMPT.get() {
+                                Some(global_rag_prompt) => {
+                                    // compose new system message content
+                                    let content = format!(
+                                        "{system_message}\n{rag_prompt}\n{context}",
+                                        system_message = message.content().trim(),
+                                        rag_prompt = global_rag_prompt.to_owned(),
+                                        context = context.trim_end()
+                                    );
+                                    // create system message
+                                    ChatCompletionRequestMessage::new_system_message(
+                                        content,
+                                        message.name().cloned(),
+                                    )
+                                }
+                                None => {
+                                    // compose new system message content
+                                    let content = format!(
+                                        "{system_message}\n{context}",
+                                        system_message = message.content().trim(),
+                                        context = context.trim_end()
+                                    );
+                                    // create system message
+                                    ChatCompletionRequestMessage::new_system_message(
+                                        content,
+                                        message.name().cloned(),
+                                    )
+                                }
+                            }
                         };
 
                         // replace the original system message
@@ -586,7 +604,7 @@ impl MergeRagContext for RagPromptBuilder {
                             }
                             None => {
                                 // compose new system message content
-                                let content = format!("Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n{}", context.trim_end());
+                                let content = format!("{}", context.trim_end());
                                 // create system message
                                 ChatCompletionRequestMessage::new_system_message(content, None)
                             }
