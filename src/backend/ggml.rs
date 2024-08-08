@@ -78,6 +78,27 @@ pub(crate) async fn embeddings_handler(mut req: Request<Body>) -> Response<Body>
     // log
     info!(target: "embeddings_handler", "Handling the coming embeddings request");
 
+    if req.method().eq(&hyper::http::Method::OPTIONS) {
+        let result = Response::builder()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "*")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
+            .body(Body::empty());
+
+        match result {
+            Ok(response) => return response,
+            Err(e) => {
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        }
+    }
+
     // parse request
     let body_bytes = match to_bytes(req.body_mut()).await {
         Ok(body_bytes) => body_bytes,
@@ -1067,6 +1088,25 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
                 error::internal_server_error(err_msg)
             }
         }
+    } else if req.method() == Method::OPTIONS {
+        let result = Response::builder()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "*")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
+            .body(Body::empty());
+
+        match result {
+            Ok(response) => return response,
+            Err(e) => {
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "files_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        }
     } else {
         let err_msg = "Invalid HTTP Method.";
 
@@ -1084,6 +1124,27 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
 pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
     // log
     info!(target: "chunks_handler", "Handling the coming chunks request");
+
+    if req.method().eq(&hyper::http::Method::OPTIONS) {
+        let result = Response::builder()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "*")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
+            .body(Body::empty());
+
+        match result {
+            Ok(response) => return response,
+            Err(e) => {
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "chunks_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        }
+    }
 
     // parse request
     let body_bytes = match to_bytes(req.body_mut()).await {
@@ -1392,6 +1453,25 @@ pub(crate) async fn doc_to_embeddings_handler(
         error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
 
         return error::internal_server_error(err_msg);
+    } else if req.method() == Method::OPTIONS {
+        let result = Response::builder()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "*")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
+            .body(Body::empty());
+
+        match result {
+            Ok(response) => return response,
+            Err(e) => {
+                let err_msg = e.to_string();
+
+                // log
+                error!(target: "doc_to_embeddings_handler", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        }
     } else {
         let err_msg = "Invalid HTTP Method.";
 
