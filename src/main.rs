@@ -78,6 +78,15 @@ struct Cli {
     /// How split tensors should be distributed accross GPUs. If None the model is not split; otherwise, a comma-separated list of non-negative values, e.g., "3,2" presents 60% of the data to GPU 0 and 40% to GPU 1.
     #[arg(long)]
     tensor_split: Option<String>,
+    /// Number of threads to use during computation
+    #[arg(long, default_value = "2")]
+    threads: u64,
+    /// BNF-like grammar to constrain generations (see samples in grammars/ dir).
+    #[arg(long, default_value = "")]
+    pub grammar: String,
+    /// JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead.
+    #[arg(long)]
+    pub json_schema: Option<String>,
     /// Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model.
     #[arg(short, long, value_delimiter = ',', default_value = "512,512", value_parser = clap::value_parser!(u64))]
     batch_size: Vec<u64>,
@@ -222,6 +231,19 @@ async fn main() -> Result<(), ServerError> {
         info!(target: "server_config", "tensor_split: {}", tensor_split);
     }
 
+    // log threads
+    info!(target: "stdout", "threads: {}", cli.threads);
+
+    // log grammar
+    if !cli.grammar.is_empty() {
+        info!(target: "stdout", "grammar: {}", &cli.grammar);
+    }
+
+    // log json schema
+    if let Some(json_schema) = &cli.json_schema {
+        info!(target: "stdout", "json_schema: {}", json_schema);
+    }
+
     // log rag prompt
     if let Some(rag_prompt) = &cli.rag_prompt {
         info!(target: "server_config", "rag_prompt: {}", rag_prompt);
@@ -290,7 +312,10 @@ async fn main() -> Result<(), ServerError> {
     .with_n_predict(cli.n_predict)
     .with_n_gpu_layers(cli.n_gpu_layers)
     .with_main_gpu(cli.main_gpu)
-    .with_tensor_split(cli.tensor_split)
+    .with_tensor_split(cli.tensor_split.clone())
+    .with_threads(cli.threads)
+    .with_grammar(cli.grammar)
+    .with_json_schema(cli.json_schema)
     .enable_plugin_log(true)
     .enable_debug_log(plugin_debug)
     .build();
@@ -322,6 +347,9 @@ async fn main() -> Result<(), ServerError> {
     )
     .with_ctx_size(cli.ctx_size[1])
     .with_batch_size(cli.batch_size[1])
+    .with_main_gpu(cli.main_gpu)
+    .with_tensor_split(cli.tensor_split)
+    .with_threads(cli.threads)
     .enable_plugin_log(true)
     .enable_debug_log(plugin_debug)
     .build();
