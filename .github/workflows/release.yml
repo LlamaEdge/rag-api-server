@@ -33,13 +33,6 @@ jobs:
           cargo build --target wasm32-wasip1 --release
           cp target/wasm32-wasip1/release/rag-api-server.wasm rag-api-server.wasm
 
-      - name: Build rag-api-server-full
-        id: build_rag_api_server_full
-        run: |
-          cargo clean
-          cargo build --target wasm32-wasip1 --release --features full
-          cp target/wasm32-wasip1/release/rag-api-server.wasm rag-api-server-full.wasm
-
       - name: Calculate checksum
         id: checksum
         run: |
@@ -65,5 +58,4 @@ jobs:
           prerelease: true
           files: |
             rag-api-server.wasm
-            rag-api-server-full.wasm
             SHA256SUM
