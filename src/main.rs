@@ -151,7 +151,7 @@ async fn main() -> Result<(), ServerError> {
     let cli = Cli::parse();
 
     // log the version of the server
-    info!(target: "server_config", "server_version: {}", env!("CARGO_PKG_VERSION"));
+    info!(target: "stdout", "server_version: {}", env!("CARGO_PKG_VERSION"));
 
     // log model name
     if cli.model_name.len() != 2 {
@@ -159,7 +159,7 @@ async fn main() -> Result<(), ServerError> {
             "LlamaEdge RAG API server requires a chat model and an embedding model.".to_owned(),
         ));
     }
-    info!(target: "server_config", "model_name: {}", cli.model_name.join(","));
+    info!(target: "stdout", "model_name: {}", cli.model_name.join(","));
 
     // log model alias
     if cli.model_alias.len() != 2 {
@@ -167,7 +167,7 @@ async fn main() -> Result<(), ServerError> {
             "LlamaEdge RAG API server requires two model aliases: one for chat model, one for embedding model.".to_owned(),
         ));
     }
-    info!(target: "server_config", "model_alias: {}", cli.model_alias.join(","));
+    info!(target: "stdout", "model_alias: {}", cli.model_alias.join(","));
 
     // log context size
     if cli.ctx_size.len() != 2 {
@@ -181,7 +181,7 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    info!(target: "server_config", "ctx_size: {}", ctx_sizes_str);
+    info!(target: "stdout", "ctx_size: {}", ctx_sizes_str);
 
     // log batch size
     if cli.batch_size.len() != 2 {
@@ -195,7 +195,7 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    info!(target: "server_config", "batch_size: {}", batch_sizes_str);
+    info!(target: "stdout", "batch_size: {}", batch_sizes_str);
 
     // log prompt template
     if cli.prompt_template.len() != 2 {
@@ -209,27 +209,27 @@ async fn main() -> Result<(), ServerError> {
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
         .join(",");
-    info!(target: "server_config", "prompt_template: {}", prompt_template_str);
+    info!(target: "stdout", "prompt_template: {}", prompt_template_str);
 
     // log reverse prompt
     if let Some(reverse_prompt) = &cli.reverse_prompt {
-        info!(target: "server_config", "reverse_prompt: {}", reverse_prompt);
+        info!(target: "stdout", "reverse_prompt: {}", reverse_prompt);
     }
 
     // log n_predict
-    info!(target: "server_config", "n_predict: {}", &cli.n_predict);
+    info!(target: "stdout", "n_predict: {}", &cli.n_predict);
 
     // log n_gpu_layers
-    info!(target: "server_config", "n_gpu_layers: {}", &cli.n_gpu_layers);
+    info!(target: "stdout", "n_gpu_layers: {}", &cli.n_gpu_layers);
 
     // log main GPU
     if let Some(main_gpu) = &cli.main_gpu {
-        info!(target: "server_config", "main_gpu: {}", main_gpu);
+        info!(target: "stdout", "main_gpu: {}", main_gpu);
     }
 
     // log tensor split
     if let Some(tensor_split) = &cli.tensor_split {
-        info!(target: "server_config", "tensor_split: {}", tensor_split);
+        info!(target: "stdout", "tensor_split: {}", tensor_split);
     }
 
     // log threads
@@ -247,7 +247,7 @@ async fn main() -> Result<(), ServerError> {
 
     // log rag prompt
     if let Some(rag_prompt) = &cli.rag_prompt {
-        info!(target: "server_config", "rag_prompt: {}", rag_prompt);
+        info!(target: "stdout", "rag_prompt: {}", rag_prompt);
 
         GLOBAL_RAG_PROMPT.set(rag_prompt.clone()).map_err(|_| {
             ServerError::Operation("Failed to set `GLOBAL_RAG_PROMPT`.".to_string())
@@ -263,21 +263,21 @@ async fn main() -> Result<(), ServerError> {
 
         // log
         {
-            error!(target: "server_config", "rag_prompt: {}", err_msg);
+            error!(target: "stdout", "rag_prompt: {}", err_msg);
         }
 
         return Err(ServerError::ArgumentError(err_msg));
     }
-    info!(target: "server_config", "qdrant_url: {}", &cli.qdrant_url);
+    info!(target: "stdout", "qdrant_url: {}", &cli.qdrant_url);
 
     // log qdrant collection name
-    info!(target: "server_config", "qdrant_collection_name: {}", &cli.qdrant_collection_name);
+    info!(target: "stdout", "qdrant_collection_name: {}", &cli.qdrant_collection_name);
 
     // log qdrant limit
-    info!(target: "server_config", "qdrant_limit: {}", &cli.qdrant_limit);
+    info!(target: "stdout", "qdrant_limit: {}", &cli.qdrant_limit);
 
     // log qdrant score threshold
-    info!(target: "server_config", "qdrant_score_threshold: {}", &cli.qdrant_score_threshold);
+    info!(target: "stdout", "qdrant_score_threshold: {}", &cli.qdrant_score_threshold);
 
     // create qdrant config
     let qdrant_config = QdrantConfig {
@@ -288,10 +288,10 @@ async fn main() -> Result<(), ServerError> {
     };
 
     // log chunk capacity
-    info!(target: "server_config", "chunk_capacity: {}", &cli.chunk_capacity);
+    info!(target: "stdout", "chunk_capacity: {}", &cli.chunk_capacity);
 
     // RAG policy
-    info!(target: "server_config", "rag_policy: {}", &cli.policy);
+    info!(target: "stdout", "rag_policy: {}", &cli.policy);
 
     let mut policy = cli.policy;
     if policy == MergeRagContextPolicy::SystemMessage && !cli.prompt_template[0].has_system_prompt()
@@ -386,7 +386,7 @@ async fn main() -> Result<(), ServerError> {
         let err_msg = format!("Failed to initialize the core context. {}", e);
 
         // log
-        error!(target: "llama_core", "{}", &err_msg);
+        error!(target: "stdout", "{}", &err_msg);
 
         ServerError::Operation(err_msg)
     })?;
@@ -401,7 +401,7 @@ async fn main() -> Result<(), ServerError> {
     );
 
     // log plugin version
-    info!(target: "server_config", "plugin_ggml_version: {}", &plugin_version);
+    info!(target: "stdout", "plugin_ggml_version: {}", &plugin_version);
 
     // socket address
     let addr = cli
@@ -411,14 +411,14 @@ async fn main() -> Result<(), ServerError> {
     let port = addr.port().to_string();
 
     // log socket address
-    info!(target: "server_config", "socket_address: {}", addr.to_string());
+    info!(target: "stdout", "socket_address: {}", addr.to_string());
 
     // get the environment variable `NODE_VERSION`
     // Note that this is for satisfying the requirement of `gaianet-node` project.
     let node = std::env::var("NODE_VERSION").ok();
     if node.is_some() {
         // log node version
-        info!(target: "server_config", "gaianet_node_version: {}", node.as_ref().unwrap());
+        info!(target: "stdout", "gaianet_node_version: {}", node.as_ref().unwrap());
     }
 
     // create server info
@@ -440,7 +440,7 @@ async fn main() -> Result<(), ServerError> {
 
     let new_service = make_service_fn(move |conn: &AddrStream| {
         // log socket address
-        info!(target: "connection", "remote_addr: {}, local_addr: {}", conn.remote_addr().to_string(), conn.local_addr().to_string());
+        info!(target: "stdout", "remote_addr: {}, local_addr: {}", conn.remote_addr().to_string(), conn.local_addr().to_string());
 
         let web_ui = cli.web_ui.to_string_lossy().to_string();
         let chunk_capacity = cli.chunk_capacity;
