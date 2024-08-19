@@ -458,7 +458,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                 match result {
                     Ok(response) => {
                         // log
-                        info!(target: "chat_completions_stream", "finish chat completions in stream mode");
+                        info!(target: "stdout", "finish chat completions in stream mode");
 
                         response
                     }
@@ -467,7 +467,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                             format!("Failed chat completions in stream mode. Reason: {}", e);
 
                         // log
-                        error!(target: "chat_completions_stream", "{}", &err_msg);
+                        error!(target: "stdout", "{}", &err_msg);
 
                         error::internal_server_error(err_msg)
                     }
@@ -481,7 +481,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                         let err_msg = format!("Failed to serialize chat completion object. {}", e);
 
                         // log
-                        error!(target: "chat_completions", "{}", &err_msg);
+                        error!(target: "stdout", "{}", &err_msg);
 
                         return error::internal_server_error(err_msg);
                     }
@@ -499,7 +499,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                 match result {
                     Ok(response) => {
                         // log
-                        info!(target: "chat_completions", "Finish chat completions in non-stream mode");
+                        info!(target: "stdout", "Finish chat completions in non-stream mode");
 
                         response
                     }
@@ -508,7 +508,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                             format!("Failed chat completions in non-stream mode. Reason: {}", e);
 
                         // log
-                        error!(target: "chat_completions", "{}", &err_msg);
+                        error!(target: "stdout", "{}", &err_msg);
 
                         error::internal_server_error(err_msg)
                     }
@@ -519,7 +519,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
             let err_msg = format!("Failed to get chat completions. Reason: {}", e);
 
             // log
-            error!(target: "chat_completions_handler", "{}", &err_msg);
+            error!(target: "stdout", "{}", &err_msg);
 
             error::internal_server_error(err_msg)
         }
@@ -1683,7 +1683,7 @@ pub(crate) async fn server_info_handler() -> Response<Body> {
             let err_msg = "The server info is not set.";
 
             // log
-            error!(target: "server_info_handler", "{}", &err_msg);
+            error!(target: "stdout", "{}", &err_msg);
 
             return error::internal_server_error("The server info is not set.");
         }
@@ -1696,7 +1696,7 @@ pub(crate) async fn server_info_handler() -> Response<Body> {
             let err_msg = format!("Fail to serialize server info. {}", e);
 
             // log
-            error!(target: "server_info_handler", "{}", &err_msg);
+            error!(target: "stdout", "{}", &err_msg);
 
             return error::internal_server_error(err_msg);
         }
@@ -1715,7 +1715,7 @@ pub(crate) async fn server_info_handler() -> Response<Body> {
             let err_msg = e.to_string();
 
             // log
-            error!(target: "server_info_handler", "{}", &err_msg);
+            error!(target: "stdout", "{}", &err_msg);
 
             error::internal_server_error(err_msg)
         }
