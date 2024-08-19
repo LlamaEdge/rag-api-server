@@ -4,9 +4,9 @@ version = "0.8.2"
 edition = "2021"
 
 [dependencies]
-endpoints = { version = "=0.12.0", path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/endpoints" }
-chat-prompts = { version = "=0.11.1", path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/chat-prompts" }
-llama-core = { version = "=0.14.1", features = [
+endpoints = { version = "=0.13.0", path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/endpoints" }
+chat-prompts = { version = "=0.11.2", path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/chat-prompts" }
+llama-core = { version = "=0.15.0", features = [
     "logging",
 ], path = "/Volumes/Dev/secondstate/me/LlamaEdge/api-server/llama-core" }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
