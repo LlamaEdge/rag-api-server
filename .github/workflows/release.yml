@@ -28,6 +28,8 @@ jobs:
 
       - name: Build rag-api-server
         id: build_rag_api_server
+        env:
+          RUSTFLAGS: "--cfg wasmedge --cfg tokio_unstable"
         run: |
           cargo clean
           cargo build --target wasm32-wasip1 --release
