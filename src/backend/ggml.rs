@@ -1,3 +1,5 @@
+#[cfg(feature = "search")]
+use crate::search::*;
 use crate::{error, utils::gen_chat_id, GLOBAL_RAG_PROMPT, SERVER_INFO};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
@@ -372,6 +374,9 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         }
     };
 
+    #[cfg(feature = "search")]
+    let mut web_search_allowed: bool = false;
+
     if let Some(ro) = res {
         match ro.points {
             Some(scored_points) => {
@@ -379,6 +384,11 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                     true => {
                         // log
                         warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
+                        #[cfg(feature = "search")]
+                        {
+                            info!(target: "stdout", "No points retrieved, enabling web search.");
+                            web_search_allowed = true;
+                        }
                     }
                     false => {
                         // update messages with retrieved context
@@ -435,7 +445,26 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                 // log
                 warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
                 ));
+
+                #[cfg(feature = "search")]
+                {
+                    info!(target: "stdout", "No points retrieved, enabling web search.");
+                    web_search_allowed = true;
+                }
             }
+        }
+    }
+
+    #[cfg(feature = "search")]
+    if web_search_allowed {
+        // TODO: check the llamaedge-query-server if the current user query could use an internet search.
+
+        info!(target: "stdout", "Performing web search.");
+        if let Err(e) = insert_search_results(&mut chat_request).await {
+            let err_msg = "encountered an error while appending search results.".to_string();
+            // log
+            error!(target: "stdout", "{}", &err_msg);
+            return e;
         }
     }
 

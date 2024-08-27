@@ -3,6 +3,8 @@ extern crate log;
 
 mod backend;
 mod error;
+#[cfg(feature = "search")]
+mod search;
 mod utils;
 
 use anyhow::Result;
@@ -16,11 +18,17 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server, StatusCode,
 };
+#[cfg(feature = "search")]
+use llama_core::search::{ContentType, SearchConfig};
 use llama_core::MetadataBuilder;
 use once_cell::sync::OnceCell;
+#[cfg(feature = "search")]
+use search::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 use tokio::net::TcpListener;
+#[cfg(feature = "search")]
+use utils::SearchArguments;
 use utils::{is_valid_url, LogLevel};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -29,6 +37,12 @@ type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
 // server info
 pub(crate) static SERVER_INFO: OnceCell<ServerInfo> = OnceCell::new();
+// default SearchConfig
+#[cfg(feature = "search")]
+pub(crate) static SEARCH_CONFIG: OnceCell<SearchConfig> = OnceCell::new();
+// search related arguments passed on the command line
+#[cfg(feature = "search")]
+pub(crate) static SEARCH_ARGUMENTS: OnceCell<SearchArguments> = OnceCell::new();
 
 // default socket address
 const DEFAULT_SOCKET_ADDRESS: &str = "0.0.0.0:8080";
@@ -127,6 +141,24 @@ struct Cli {
     /// Deprecated. Print all log information to stdout
     #[arg(long)]
     log_all: bool,
+    /// Maximum number search results to use.
+    #[arg(long, default_value = "5")]
+    max_search_results: u8,
+    /// Size to clip every result to.
+    #[arg(long, default_value = "300")]
+    size_limit_per_result: u16,
+    /// API key to be supplied to the endpoint, if supported.
+    #[arg(long, default_value = "")]
+    api_key: String,
+    /// System prompt explut ChatCompletionRequest: &aining to the LLM how to interpret search results.
+    #[arg(
+        long,
+        default_value = "You found the following search results on the internet. Use them to answer the user's query.\n\n"
+    )]
+    search_prompt: String,
+    /// API key to be supplied to the endpoint, if supported.
+    #[arg(long)]
+    summarize: bool,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -419,6 +451,63 @@ async fn main() -> Result<(), ServerError> {
     if node.is_some() {
         // log node version
         info!(target: "stdout", "gaianet_node_version: {}", node.as_ref().unwrap());
+    }
+
+    // setup search items
+    #[cfg(feature = "search")]
+    {
+        // by default, we will use Tavily.
+        let tavily_config = llama_core::search::SearchConfig::new(
+            "tavily".to_owned(),
+            cli.max_search_results,
+            cli.size_limit_per_result,
+            "https://api.tavily.com/search".to_owned(),
+            ContentType::JSON,
+            ContentType::JSON,
+            "POST".to_owned(),
+            None,
+            tavily_search::tavily_parser,
+            None,
+            None,
+        );
+
+        SEARCH_CONFIG
+            .set(tavily_config)
+            .map_err(|_| ServerError::Operation("Failed to set `SEARCH_CONFIG`.".to_owned()))?;
+
+        // Bing Search:
+        //
+        // let mut additional_headers = HashMap::new();
+        // additional_headers.insert("Ocp-Apim-Subscription-Key".to_string(), cli.api_key.clone());
+        //
+        // let bing_config = llama_core::search::SearchConfig::new(
+        //     "bing".to_owned(),
+        //     cli.max_search_results,
+        //     cli.size_limit_per_result,
+        //     // use of https requires the "full" or "https" feature
+        //     "https://api.bing.microsoft.com/v7.0/search".to_owned(),
+        //     ContentType::JSON,
+        //     ContentType::JSON,
+        //     "GET".to_owned(),
+        //     Some(additional_headers),
+        //     bing_search::bing_parser,
+        //     None,
+        //     None,
+        // );
+        //
+        // SEARCH_CONFIG
+        //     .set(bing_config)
+        //     .map_err(|_| ServerError::Operation("Failed to set `SEARCH_CONFIG`.".to_owned()))?;
+
+        let search_arguments = SearchArguments {
+            api_key: cli.api_key.clone(),
+            search_prompt: cli.search_prompt.clone(),
+            summarize: cli.summarize,
+        };
+
+        SEARCH_ARGUMENTS
+            .set(search_arguments)
+            .map_err(|_| ServerError::Operation("Failed to set `SEARCH_ARGUMENTS`.".to_owned()))?;
     }
 
     // create server info

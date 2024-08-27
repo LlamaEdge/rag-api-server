@@ -9,6 +9,17 @@ pub(crate) fn gen_chat_id() -> String {
     format!("chatcmpl-{}", uuid::Uuid::new_v4())
 }
 
+/// Search related items that aren't directly supported by SearchConfig
+#[cfg(feature = "search")]
+pub(crate) struct SearchArguments {
+    /// API key to be supplied to the endpoint, if supported. Not used by Bing.
+    pub(crate) api_key: String,
+    /// System prompt explaining to the LLM how to interpret search results.
+    pub(crate) search_prompt: String,
+    /// Whether to summarize the search results before using them.
+    pub(crate) summarize: bool,
+}
+
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum, Serialize, Deserialize,
 )]
