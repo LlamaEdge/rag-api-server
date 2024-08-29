@@ -82,7 +82,4 @@ pub enum ServerError {
     ArgumentError(String),
     #[error("{0}")]
     Operation(String),
-    /// Conversion error when converting to SearchOutput
-    #[error("{0}")]
-    SearchConversionError(String),
 }

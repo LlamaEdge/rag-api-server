@@ -14,10 +14,10 @@ pub(crate) fn gen_chat_id() -> String {
 pub(crate) struct SearchArguments {
     /// API key to be supplied to the endpoint, if supported. Not used by Bing.
     pub(crate) api_key: String,
-    /// System prompt explaining to the LLM how to interpret search results.
-    pub(crate) search_prompt: String,
-    /// Whether to summarize the search results before using them.
-    pub(crate) summarize: bool,
+    /// The URL for the LlamaEdge query server. Supplying this implies usage.
+    pub(crate) query_server_url: String,
+    /// The URL for the LlamaEdge query server. Supplying this implies usage.
+    pub(crate) search_backend: String,
 }
 
 #[derive(

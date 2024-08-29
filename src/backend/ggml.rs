@@ -1,5 +1,3 @@
-#[cfg(feature = "search")]
-use crate::search::*;
 use crate::{error, utils::gen_chat_id, GLOBAL_RAG_PROMPT, SERVER_INFO};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
@@ -263,6 +261,9 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
 
     info!(target: "stdout", "Compute embeddings for user query.");
 
+    #[cfg(feature = "search")]
+    let query: String;
+
     // * compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
         true => {
@@ -289,6 +290,10 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                         }
                     };
 
+                    #[cfg(feature = "search")]
+                    {
+                        query = query_text.clone();
+                    }
                     // log
                     info!(target: "stdout", "query text: {}", query_text);
 
@@ -384,6 +389,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                     true => {
                         // log
                         warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
+
                         #[cfg(feature = "search")]
                         {
                             info!(target: "stdout", "No points retrieved, enabling web search.");
@@ -457,14 +463,123 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
 
     #[cfg(feature = "search")]
     if web_search_allowed {
-        // TODO: check the llamaedge-query-server if the current user query could use an internet search.
+        let search_arguments = match crate::SEARCH_ARGUMENTS.get() {
+            Some(sc) => sc,
+            None => {
+                let err_msg = "Failed to obtain SEARCH_ARGUMENTS. Was it set?".to_string();
+                error!(target: "stdout", "{}", &err_msg);
 
-        info!(target: "stdout", "Performing web search.");
-        if let Err(e) = insert_search_results(&mut chat_request).await {
-            let err_msg = "encountered an error while appending search results.".to_string();
-            // log
-            error!(target: "stdout", "{}", &err_msg);
-            return e;
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        let endpoint: hyper::Uri = match search_arguments.query_server_url.parse() {
+            Ok(uri) => uri,
+            Err(e) => {
+                let err_msg = format!(
+                    "LlamaEdge Query server URL could not be parsed: {}",
+                    e.to_string()
+                );
+                error!(target: "stdout", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        let summary_endpoint = match hyper::Uri::builder()
+            .scheme(endpoint.scheme().unwrap().to_string().as_str())
+            .authority(endpoint.authority().unwrap().to_string().as_str())
+            .path_and_query("/test/summarize")
+            .build()
+        {
+            Ok(se) => se,
+            Err(_) => {
+                let err_msg = "couldn't build summary_endpoint from query_server_url".to_string();
+                error!(target: "stdout", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        //perform query, extract summary, add to
+        let req = match Request::builder()
+            .method(Method::POST)
+            .uri(summary_endpoint)
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "search_config" : {
+                    "api_key": search_arguments.api_key,
+                    },
+                    "backend": search_arguments.search_backend,
+                    "query": query,
+                })
+                .to_string(),
+            )) {
+            Ok(request) => request,
+            Err(_) => {
+                let err_msg = "failed to build request to LLamaEdge query server.".to_string();
+                error!(target: "stdout", "{}", &err_msg);
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        info!(target: "stdout", "Querying the LlamaEdge query server.");
+
+        let client = hyper::client::Client::new();
+        let res = match client.request(req).await {
+            Ok(response) => response,
+            Err(e) => {
+                let err_msg = format!(
+                    "couldn't make request to LlamaEdge query server: {}",
+                    e.to_string()
+                );
+                error!(target: "stdout", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        let is_success = res.status().is_success();
+
+        let body_bytes = match hyper::body::to_bytes(res.into_body()).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                let err_msg = format!("couldn't convert body into bytes: {}", e.to_string());
+                error!(target: "stdout", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        let body_json: serde_json::Value = match serde_json::from_slice(&body_bytes) {
+            Ok(json) => json,
+            Err(e) => {
+                let err_msg = format!("couldn't convert body into json: {}", e.to_string());
+                error!(target: "stdout", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+        };
+
+        info!(target: "stdout", "processed query server response json body: \n{}", body_json);
+
+        // if the request is a success, check decision and inject results accordingly.
+        if is_success {
+            if body_json["decision"].as_bool().unwrap_or(true) {
+                // the logic to ensure "results" is a serde_json::Value::String is present on the
+                // llamaedge-query-server.
+                let results = body_json["results"].as_str().unwrap_or("");
+
+                //inject search results
+                let system_search_result_message: ChatCompletionRequestMessage =
+                    ChatCompletionRequestMessage::new_system_message(results, None);
+
+                chat_request.messages.insert(
+                    chat_request.messages.len() - 1,
+                    system_search_result_message,
+                )
+            }
         }
     }
 
