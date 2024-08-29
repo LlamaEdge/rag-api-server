@@ -16,7 +16,7 @@ pub(crate) struct SearchArguments {
     pub(crate) api_key: String,
     /// The URL for the LlamaEdge query server. Supplying this implies usage.
     pub(crate) query_server_url: String,
-    /// The URL for the LlamaEdge query server. Supplying this implies usage.
+    /// The search API backend to use for requests.
     pub(crate) search_backend: String,
 }
 

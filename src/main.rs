@@ -141,7 +141,7 @@ struct Cli {
     #[cfg(feature = "search")]
     #[arg(long, required = true)]
     query_server_url: String,
-    /// The URL for the LlamaEdge query server. Supplying this implies usage.
+    /// The search API backend to use for internet search.
     #[cfg(feature = "search")]
     #[arg(long, default_value = "tavily", requires = "query-server-url")]
     search_backend: String,
