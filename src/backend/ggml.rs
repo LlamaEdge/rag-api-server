@@ -486,7 +486,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         let summary_endpoint = match hyper::Uri::builder()
             .scheme(endpoint.scheme().unwrap().to_string().as_str())
             .authority(endpoint.authority().unwrap().to_string().as_str())
-            .path_and_query("/test/summarize")
+            .path_and_query("/query/summarize")
             .build()
         {
             Ok(se) => se,
