@@ -444,16 +444,16 @@ git clone https://github.com/LlamaEdge/rag-api-server.git
 cd rag-api-server
 
 # (Optional) Add the `wasm32-wasi` target to the Rust toolchain
-rustup target add wasm32-wasi
+rustup target add wasm32-wasip1
 
-# Build `rag-api-server.wasm` with the `http` support only, or
-cargo build --target wasm32-wasi --release
+# Build `rag-api-server.wasm` without internet search
+cargo build --target wasm32-wasip1 --release
 
-# Build `rag-api-server.wasm` with both `http` and `https` support
-cargo build --target wasm32-wasi --release --features full
+# Build `rag-api-server.wasm` with internet search capability
+cargo build --target wasm32-wasip1 --release --features search
 
 # Copy the `rag-api-server.wasm` to the root directory
-cp target/wasm32-wasi/release/rag-api-server.wasm .
+cp target/wasm32-wasip1/release/rag-api-server.wasm .
 ```
 
 <details> <summary> To check the CLI options, </summary>
@@ -524,6 +524,19 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
           Print version
   ```
 
+Compiling the server with the `search` feature enabled (using either the `--features search` flag when building or editing `Cargo.toml`), the following extra CLI arguments will be made available:
+
+```bash
+      --api-key <API_KEY>
+          API key to be supplied to the endpoint, if supported
+          [default: ]
+      --query-server-url <QUERY_SERVER_URL>
+          The URL for the LlamaEdge query server. Supplying this implies usage
+      --search-backend <SEARCH_BACKEND>
+          The search API backend to use for internet search
+          [default: tavily]
+```
+
 </details>
 
 ## Execute
@@ -547,6 +560,8 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
     docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant
     ```
 
+### Start without Internet Serach
+
 - Start an instance of LlamaEdge-RAG API server
 
   ```bash
@@ -560,6 +575,25 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
       --log-prompts \
       --log-stat
   ```
+
+### Start with Internet Search
+
+  - Start an instance of LlamaEdge-RAG API server with URL of your chosen [LlamaEdge Query Server](https://github.com/LlamaEdge/llamaedge-query-server/) instance. The query server can be ran locally.
+
+  ```bash
+  wasmedge --dir .:. --nn-preload default:GGML:AUTO:Llama-2-7b-chat-hf-Q5_K_M.gguf \
+      --nn-preload embedding:GGML:AUTO:all-MiniLM-L6-v2-ggml-model-f16.gguf \
+      rag-api-server.wasm \
+      --model-name Llama-2-7b-chat-hf-Q5_K_M,all-MiniLM-L6-v2-ggml-model-f16 \
+      --ctx-size 4096,384 \
+      --prompt-template llama-2-chat,embedding \
+      --rag-prompt "Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n" \
+      --api-key "xxx" \                               # Use if your chosen LlamaEdge query server endpoint requires one.
+      --query-server-url "http://0.0.0.0:8081/" \     # URL of the LlamaEdge query server of your choosing. This is the default local endpoint.
+      --log-prompts \ 
+      --log-stat
+  ```
+
 
 ## Usage Example
 
@@ -579,6 +613,8 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
         -H 'Content-Type: application/json' \
         -d '{"messages":[{"role":"system", "content": "You are a helpful assistant."}, {"role":"user", "content": "What is the location of Paris, France along the Seine River?"}], "model":"Llama-2-7b-chat-hf-Q5_K_M"}'
     ```
+
+Internet search will only be used if the question cannot be answered using RAG. If it is needed, the user message will be queried to the `/query/summarize` endpoint on the [LlamaEdge Query Server](https://github.com/LlamaEdge/llamaedge-query-server/) instance, where the server will respond with the summary of the internet search results if it decides it is necessary.
 
 ## Set Log Level
 
