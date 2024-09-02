@@ -11,6 +11,7 @@ pub(crate) fn gen_chat_id() -> String {
 
 /// Search related items that aren't directly supported by SearchConfig
 #[cfg(feature = "search")]
+#[derive(Debug)]
 pub(crate) struct SearchArguments {
     /// API key to be supplied to the endpoint, if supported. Not used by Bing.
     pub(crate) api_key: String,

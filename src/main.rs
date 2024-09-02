@@ -480,7 +480,7 @@ async fn main() -> Result<(), ServerError> {
 
         SEARCH_ARGUMENTS
             .set(search_arguments)
-            .map_err(|_| ServerError::Operation("Failed to set `SERVER_INFO`.".to_string()))?;
+            .map_err(|_| ServerError::Operation("Failed to set `SEARCH_ARGUMENTS`.".to_string()))?;
     }
 
     // let server = Server::bind(&addr).serve(new_service);
