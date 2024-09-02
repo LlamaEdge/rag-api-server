@@ -526,7 +526,7 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
 
 Compiling the server with the `search` feature enabled (using either the `--features search` flag when building or editing `Cargo.toml`), the following extra CLI arguments will be made available:
 
-```bash
+  ```bash
       --api-key <API_KEY>
           API key to be supplied to the endpoint, if supported
           [default: ]
@@ -535,7 +535,7 @@ Compiling the server with the `search` feature enabled (using either the `--feat
       --search-backend <SEARCH_BACKEND>
           The search API backend to use for internet search
           [default: tavily]
-```
+  ```
 
 </details>
 
@@ -578,21 +578,21 @@ For the purpose of demonstration, we use the [Llama-2-7b-chat-hf-Q5_K_M.gguf](ht
 
 ### Start with Internet Search
 
-  - Start an instance of LlamaEdge-RAG API server with URL of your chosen [LlamaEdge Query Server](https://github.com/LlamaEdge/llamaedge-query-server/) instance. The query server can be ran locally.
+- Start an instance of LlamaEdge-RAG API server with URL of your chosen [LlamaEdge Query Server](https://github.com/LlamaEdge/llamaedge-query-server/) instance. The query server can be ran locally.
 
-  ```bash
-  wasmedge --dir .:. --nn-preload default:GGML:AUTO:Llama-2-7b-chat-hf-Q5_K_M.gguf \
-      --nn-preload embedding:GGML:AUTO:all-MiniLM-L6-v2-ggml-model-f16.gguf \
-      rag-api-server.wasm \
-      --model-name Llama-2-7b-chat-hf-Q5_K_M,all-MiniLM-L6-v2-ggml-model-f16 \
-      --ctx-size 4096,384 \
-      --prompt-template llama-2-chat,embedding \
-      --rag-prompt "Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n" \
-      --api-key "xxx" \                               # Use if your chosen LlamaEdge query server endpoint requires one.
-      --query-server-url "http://0.0.0.0:8081/" \     # URL of the LlamaEdge query server of your choosing. This is the default local endpoint.
-      --log-prompts \ 
-      --log-stat
-  ```
+    ```bash
+    wasmedge --dir .:. --nn-preload default:GGML:AUTO:Llama-2-7b-chat-hf-Q5_K_M.gguf \
+        --nn-preload embedding:GGML:AUTO:all-MiniLM-L6-v2-ggml-model-f16.gguf \
+        rag-api-server.wasm \
+        --model-name Llama-2-7b-chat-hf-Q5_K_M,all-MiniLM-L6-v2-ggml-model-f16 \
+        --ctx-size 4096,384 \
+        --prompt-template llama-2-chat,embedding \
+        --rag-prompt "Use the following pieces of context to answer the user's question.\nIf you don't know the answer, just say that you don't know, don't try to make up an answer.\n----------------\n" \
+        --api-key "xxx" \                               # Use if your chosen LlamaEdge query server endpoint requires one.
+        --query-server-url "http://0.0.0.0:8081/" \     # URL of the LlamaEdge query server of your choosing. This is the default local endpoint.
+        --log-prompts \ 
+        --log-stat
+    ```
 
 
 ## Usage Example
