@@ -350,8 +350,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d7fc9d44ec5cfad9eaafb8ef03cb8ad6398d9e17f4f0def724254b2041f23ef"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=refactor-project-structure#d47b8e5cb1c85c8ce82ea31515b067dfefd7e87e"
 dependencies = [
  "base64 0.22.0",
  "clap",
@@ -539,8 +538,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4987369f67193d0697fe478af0309d2c64d9945a6a91f417f8d91da423f680c1"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=refactor-project-structure#d47b8e5cb1c85c8ce82ea31515b067dfefd7e87e"
 dependencies = [
  "indexmap",
  "serde",
@@ -1161,8 +1159,7 @@ checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 [[package]]
 name = "llama-core"
 version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16e1c6bb1628a12d3142878cc25f07f0f369c4a39d538a82edd83724a9b21d4a"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=refactor-project-structure#d47b8e5cb1c85c8ce82ea31515b067dfefd7e87e"
 dependencies = [
  "base64 0.22.0",
  "chat-prompts",
@@ -3037,9 +3034,9 @@ dependencies = [
 
 [[package]]
 name = "wasmedge_stable_diffusion"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb63a2d1a7c572bd7841195e3609246873b783f636ca3f0743fcf3e929be7ef"
+checksum = "97d9a176e844fe722d954de4a58cf1b16a3c14dc2e0579c8ba9e8b558137e6fb"
 
 [[package]]
 name = "wasmedge_wasi_socket"
