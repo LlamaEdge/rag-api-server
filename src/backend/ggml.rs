@@ -1,5 +1,7 @@
 use crate::{error, utils::gen_chat_id, GLOBAL_RAG_PROMPT, SERVER_INFO};
-use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
+use chat_prompts::{
+    error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy, PromptTemplateType,
+};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::EmbeddingRequest,
@@ -382,13 +384,12 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                     }
                     false => {
                         // update messages with retrieved context
-                        let mut context = String::new();
+                        let mut context = vec![];
                         for (idx, point) in scored_points.iter().enumerate() {
                             // log
                             info!(target: "stdout", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
 
-                            context.push_str(&point.source);
-                            context.push_str("\n\n");
+                            context.push(point.source.to_owned());
                         }
 
                         if chat_request.messages.is_empty() {
@@ -417,9 +418,10 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                         // insert rag context into chat request
                         if let Err(e) = RagPromptBuilder::build(
                             &mut chat_request.messages,
-                            &[context],
+                            context.as_slice(),
                             prompt_template.has_system_prompt(),
                             server_info.rag_config.policy,
+                            server_info.rag_config.chat_model.prompt_template,
                         ) {
                             let err_msg = e.to_string();
 
@@ -539,6 +541,7 @@ impl MergeRagContext for RagPromptBuilder {
         context: &[String],
         has_system_prompt: bool,
         policy: MergeRagContextPolicy,
+        prompt_type: PromptTemplateType,
     ) -> ChatPromptsError::Result<()> {
         if messages.is_empty() {
             error!(target: "stdout", "No message in the chat request.");
@@ -566,78 +569,18 @@ impl MergeRagContext for RagPromptBuilder {
 
         info!(target: "stdout", "rag_policy: {}", &policy);
 
-        let context = context[0].trim_end();
-
-        info!(target: "stdout", "context:\n{}", context);
-
-        match policy {
-            MergeRagContextPolicy::SystemMessage => {
-                info!(target: "stdout", "Merge RAG context into system message.");
-
-                match &messages[0] {
-                    ChatCompletionRequestMessage::System(message) => {
-                        let system_message = {
-                            match GLOBAL_RAG_PROMPT.get() {
-                                Some(global_rag_prompt) => {
-                                    // compose new system message content
-                                    let content = format!(
-                                        "{system_message}\n{rag_prompt}\n{context}",
-                                        system_message = message.content().trim(),
-                                        rag_prompt = global_rag_prompt.to_owned(),
-                                        context = context.trim_end()
-                                    );
-                                    // create system message
-                                    ChatCompletionRequestMessage::new_system_message(
-                                        content,
-                                        message.name().cloned(),
-                                    )
-                                }
-                                None => {
-                                    // compose new system message content
-                                    let content = format!(
-                                        "{system_message}\n{context}",
-                                        system_message = message.content().trim(),
-                                        context = context.trim_end()
-                                    );
-                                    // create system message
-                                    ChatCompletionRequestMessage::new_system_message(
-                                        content,
-                                        message.name().cloned(),
-                                    )
-                                }
-                            }
-                        };
-
-                        // replace the original system message
-                        messages[0] = system_message;
-                    }
-                    _ => {
-                        let system_message = match GLOBAL_RAG_PROMPT.get() {
-                            Some(global_rag_prompt) => {
-                                // compose new system message content
-                                let content = format!(
-                                    "{rag_prompt}\n{context}",
-                                    rag_prompt = global_rag_prompt.to_owned(),
-                                    context = context.trim_end()
-                                );
-                                // create system message
-                                ChatCompletionRequestMessage::new_system_message(content, None)
-                            }
-                            None => {
-                                // compose new system message content
-                                let content = context.trim_end().to_string();
-                                // create system message
-                                ChatCompletionRequestMessage::new_system_message(content, None)
-                            }
-                        };
-
-                        // insert system message
-                        messages.insert(0, system_message);
-                    }
+        match prompt_type {
+            PromptTemplateType::CohereChat => {
+                // concat retrieved documents as context text
+                let mut retrieved_snippets = String::new();
+                for (idx, doc) in context.iter().enumerate() {
+                    info!(target: "stdout", "context {}: {}", idx, doc);
+                    let snippet = format!("Document: {}\ntext: {}", idx, doc);
+                    retrieved_snippets.push_str(&snippet);
+                    retrieved_snippets.push_str("\n\n");
                 }
-            }
-            MergeRagContextPolicy::LastUserMessage => {
-                info!(target: "stdout", "Merge RAG context into last user message.");
+                // trim the last newlines
+                let context = format!("<results>\n{}\n</results>", retrieved_snippets.trim_end());
 
                 let len = messages.len();
                 match &messages.last() {
@@ -645,10 +588,10 @@ impl MergeRagContext for RagPromptBuilder {
                         if let ChatCompletionUserMessageContent::Text(content) = message.content() {
                             // compose new user message content
                             let content = format!(
-                                    "{context}\nAnswer the question based on the pieces of context above. The question is:\n{user_message}",
-                                    context = context.trim_end(),
-                                    user_message = content.trim(),
-                                );
+                                "{user_message}\n\n{context}",
+                                user_message = content.trim(),
+                                context = context.trim_end(),
+                            );
 
                             let content = ChatCompletionUserMessageContent::Text(content);
 
@@ -669,6 +612,124 @@ impl MergeRagContext for RagPromptBuilder {
                         error!(target: "stdout", "{}", &err_msg);
 
                         return Err(ChatPromptsError::PromptError::BadMessages(err_msg.into()));
+                    }
+                }
+            }
+            _ => {
+                // concat retrieved documents as context text, separated by two newlines
+                let context = context.join("\n\n");
+                info!(target: "stdout", "context:\n{}", &context);
+
+                match policy {
+                    MergeRagContextPolicy::SystemMessage => {
+                        info!(target: "stdout", "Merge RAG context into system message.");
+
+                        match &messages[0] {
+                            ChatCompletionRequestMessage::System(message) => {
+                                let system_message = {
+                                    match GLOBAL_RAG_PROMPT.get() {
+                                        Some(global_rag_prompt) => {
+                                            // compose new system message content
+                                            let content = format!(
+                                                "{system_message}\n{rag_prompt}\n{context}",
+                                                system_message = message.content().trim(),
+                                                rag_prompt = global_rag_prompt.to_owned(),
+                                                context = context.trim_end()
+                                            );
+                                            // create system message
+                                            ChatCompletionRequestMessage::new_system_message(
+                                                content,
+                                                message.name().cloned(),
+                                            )
+                                        }
+                                        None => {
+                                            // compose new system message content
+                                            let content = format!(
+                                                "{system_message}\n{context}",
+                                                system_message = message.content().trim(),
+                                                context = context.trim_end()
+                                            );
+                                            // create system message
+                                            ChatCompletionRequestMessage::new_system_message(
+                                                content,
+                                                message.name().cloned(),
+                                            )
+                                        }
+                                    }
+                                };
+
+                                // replace the original system message
+                                messages[0] = system_message;
+                            }
+                            _ => {
+                                let system_message = match GLOBAL_RAG_PROMPT.get() {
+                                    Some(global_rag_prompt) => {
+                                        // compose new system message content
+                                        let content = format!(
+                                            "{rag_prompt}\n{context}",
+                                            rag_prompt = global_rag_prompt.to_owned(),
+                                            context = context.trim_end()
+                                        );
+                                        // create system message
+                                        ChatCompletionRequestMessage::new_system_message(
+                                            content, None,
+                                        )
+                                    }
+                                    None => {
+                                        // compose new system message content
+                                        let content = context.trim_end().to_string();
+                                        // create system message
+                                        ChatCompletionRequestMessage::new_system_message(
+                                            content, None,
+                                        )
+                                    }
+                                };
+
+                                // insert system message
+                                messages.insert(0, system_message);
+                            }
+                        }
+                    }
+                    MergeRagContextPolicy::LastUserMessage => {
+                        info!(target: "stdout", "Merge RAG context into last user message.");
+
+                        let len = messages.len();
+                        match &messages.last() {
+                            Some(ChatCompletionRequestMessage::User(message)) => {
+                                if let ChatCompletionUserMessageContent::Text(content) =
+                                    message.content()
+                                {
+                                    // compose new user message content
+                                    let content = format!(
+                                        "{context}\nAnswer the question based on the pieces of context above. The question is:\n{user_message}",
+                                        context = context.trim_end(),
+                                        user_message = content.trim(),
+                                    );
+
+                                    let content = ChatCompletionUserMessageContent::Text(content);
+
+                                    // create user message
+                                    let user_message =
+                                        ChatCompletionRequestMessage::new_user_message(
+                                            content,
+                                            message.name().cloned(),
+                                        );
+                                    // replace the original user message
+                                    messages[len - 1] = user_message;
+                                }
+                            }
+                            _ => {
+                                let err_msg =
+                                "The last message in the chat request should be a user message.";
+
+                                // log
+                                error!(target: "stdout", "{}", &err_msg);
+
+                                return Err(ChatPromptsError::PromptError::BadMessages(
+                                    err_msg.into(),
+                                ));
+                            }
+                        }
                     }
                 }
             }
