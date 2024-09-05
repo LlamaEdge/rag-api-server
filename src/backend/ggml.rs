@@ -491,7 +491,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         {
             Ok(se) => se,
             Err(_) => {
-                let err_msg = "couldn't build summary_endpoint from query_server_url".to_string();
+                let err_msg = "Couldn't build summary_endpoint from query_server_url".to_string();
                 error!(target: "stdout", "{}", &err_msg);
 
                 return error::internal_server_error(err_msg);
@@ -515,7 +515,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
             )) {
             Ok(request) => request,
             Err(_) => {
-                let err_msg = "failed to build request to LLamaEdge query server.".to_string();
+                let err_msg = "Failed to build request to LLamaEdge query server.".to_string();
                 error!(target: "stdout", "{}", &err_msg);
                 return error::internal_server_error(err_msg);
             }
@@ -524,55 +524,57 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         info!(target: "stdout", "Querying the LlamaEdge query server.");
 
         let client = hyper::client::Client::new();
-        let res = match client.request(req).await {
-            Ok(response) => response,
-            Err(e) => {
-                let err_msg = format!("couldn't make request to LlamaEdge query server: {}", e);
-                error!(target: "stdout", "{}", &err_msg);
+        match client.request(req).await {
+            Ok(res) => {
+                let is_success = res.status().is_success();
 
-                return error::internal_server_error(err_msg);
+                let body_bytes = match hyper::body::to_bytes(res.into_body()).await {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        let err_msg = format!("Couldn't convert body into bytes: {}", e);
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                };
+
+                let body_json: serde_json::Value = match serde_json::from_slice(&body_bytes) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        let err_msg = format!("Couldn't convert body into json: {}", e);
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                };
+
+                info!(target: "stdout", "processed query server response json body: \n{}", body_json);
+
+                // if the request is a success, check decision and inject results accordingly.
+                if is_success && body_json["decision"].as_bool().unwrap_or(true) {
+                    // the logic to ensure "results" is a serde_json::Value::String is present on the
+                    // llamaedge-query-server.
+                    let results = body_json["results"].as_str().unwrap_or("");
+
+                    info!(target: "stdout", "injecting search summary into conversation context.");
+                    //inject search results
+                    let system_search_result_message: ChatCompletionRequestMessage =
+                        ChatCompletionRequestMessage::new_system_message(results, None);
+
+                    chat_request.messages.insert(
+                        chat_request.messages.len() - 1,
+                        system_search_result_message,
+                    )
+                }
+            }
+            Err(e) => {
+                let err_msg = format!(
+                    "Couldn't make request to LlamaEdge query server, switching to regular RAG: {}",
+                    e
+                );
+                warn!(target: "stdout", "{}", &err_msg);
             }
         };
-
-        let is_success = res.status().is_success();
-
-        let body_bytes = match hyper::body::to_bytes(res.into_body()).await {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                let err_msg = format!("couldn't convert body into bytes: {}", e);
-                error!(target: "stdout", "{}", &err_msg);
-
-                return error::internal_server_error(err_msg);
-            }
-        };
-
-        let body_json: serde_json::Value = match serde_json::from_slice(&body_bytes) {
-            Ok(json) => json,
-            Err(e) => {
-                let err_msg = format!("couldn't convert body into json: {}", e);
-                error!(target: "stdout", "{}", &err_msg);
-
-                return error::internal_server_error(err_msg);
-            }
-        };
-
-        info!(target: "stdout", "processed query server response json body: \n{}", body_json);
-
-        // if the request is a success, check decision and inject results accordingly.
-        if is_success && body_json["decision"].as_bool().unwrap_or(true) {
-            // the logic to ensure "results" is a serde_json::Value::String is present on the
-            // llamaedge-query-server.
-            let results = body_json["results"].as_str().unwrap_or("");
-
-            //inject search results
-            let system_search_result_message: ChatCompletionRequestMessage =
-                ChatCompletionRequestMessage::new_system_message(results, None);
-
-            chat_request.messages.insert(
-                chat_request.messages.len() - 1,
-                system_search_result_message,
-            )
-        }
     }
 
     // chat completion
