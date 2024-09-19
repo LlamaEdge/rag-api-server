@@ -9,6 +9,18 @@ pub(crate) fn gen_chat_id() -> String {
     format!("chatcmpl-{}", uuid::Uuid::new_v4())
 }
 
+/// Search related items that aren't directly supported by SearchConfig
+#[cfg(feature = "search")]
+#[derive(Debug)]
+pub(crate) struct SearchArguments {
+    /// API key to be supplied to the endpoint, if supported. Not used by Bing.
+    pub(crate) api_key: String,
+    /// The URL for the LlamaEdge query server. Supplying this implies usage.
+    pub(crate) query_server_url: String,
+    /// The search API backend to use for internet search.
+    pub(crate) search_backend: String,
+}
+
 #[derive(
     Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum, Serialize, Deserialize,
 )]

@@ -3,6 +3,7 @@ extern crate log;
 
 mod backend;
 mod error;
+
 mod utils;
 
 use anyhow::Result;
@@ -21,6 +22,8 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 use tokio::net::TcpListener;
+#[cfg(feature = "search")]
+use utils::SearchArguments;
 use utils::{is_valid_url, LogLevel};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -29,6 +32,9 @@ type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
 // server info
 pub(crate) static SERVER_INFO: OnceCell<ServerInfo> = OnceCell::new();
+// search cli arguments
+#[cfg(feature = "search")]
+pub(crate) static SEARCH_ARGUMENTS: OnceCell<SearchArguments> = OnceCell::new();
 
 // default socket address
 const DEFAULT_SOCKET_ADDRESS: &str = "0.0.0.0:8080";
@@ -127,6 +133,18 @@ struct Cli {
     /// Deprecated. Print all log information to stdout
     #[arg(long)]
     log_all: bool,
+    /// API key to be supplied to the endpoint, if supported.
+    #[cfg(feature = "search")]
+    #[arg(long, default_value = "")]
+    api_key: String,
+    /// The URL for the LlamaEdge query server. Supplying this implies usage.
+    #[cfg(feature = "search")]
+    #[arg(long, required = true)]
+    query_server_url: String,
+    /// The search API backend to use for internet search.
+    #[cfg(feature = "search")]
+    #[arg(long, default_value = "tavily", requires = "query-server-url")]
+    search_backend: String,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -451,6 +469,19 @@ async fn main() -> Result<(), ServerError> {
             }))
         }
     });
+
+    #[cfg(feature = "search")]
+    {
+        let search_arguments = SearchArguments {
+            api_key: cli.api_key,
+            query_server_url: cli.query_server_url,
+            search_backend: cli.search_backend,
+        };
+
+        SEARCH_ARGUMENTS
+            .set(search_arguments)
+            .map_err(|_| ServerError::Operation("Failed to set `SEARCH_ARGUMENTS`.".to_string()))?;
+    }
 
     // let server = Server::bind(&addr).serve(new_service);
 

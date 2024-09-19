@@ -36,3 +36,4 @@ tokio = { git = "https://github.com/second-state/wasi_tokio.git", branch = "v1.3
 
 [features]
 default = []
+search = []
