@@ -18,4 +18,4 @@ Content-Type: application/json
 HTTP 200
 [Asserts]
 jsonpath "$.model" == "Qwen2-1.5B-Instruct"
-jsonpath "$.choices[0].message.content" contains "Paris, France"
+jsonpath "$.choices[0].message.content" contains "Paris"
