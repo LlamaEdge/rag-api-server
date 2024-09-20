@@ -17,6 +17,7 @@ on:
       - '**/*.rs'
       - '**/*.sh'
       - '**/.cargo/config.toml'
+      - 'tests/*.hurl'
   pull_request:
     branches:
       - dev
@@ -27,6 +28,7 @@ on:
       - '**/Cargo.toml'
       - '**/*.rs'
       - '**/*.sh'
+      - 'tests/*.hurl'
 
 jobs:
   test-api-server:
@@ -61,6 +63,19 @@ jobs:
           curl --location --remote-name https://github.com/Orange-OpenSource/hurl/releases/download/5.0.1/hurl_5.0.1_amd64.deb
           sudo apt update && sudo apt install ./hurl_5.0.1_amd64.deb
 
+      - name: Install Qdrant and download snapshot
+        run: |
+          # Download Qdrant
+          curl -LO https://github.com/qdrant/qdrant/releases/download/v1.11.4/qdrant-x86_64-unknown-linux-musl.tar.gz
+          tar -xvf qdrant-x86_64-unknown-linux-musl.tar.gz
+          rm qdrant-x86_64-unknown-linux-musl.tar.gz
+
+          # Download snapshot
+          curl -LO https://huggingface.co/datasets/gaianet/paris/resolve/main/paris_768_nomic-embed-text-v1.5-f16.snapshot
+          mv paris_768_nomic-embed-text-v1.5-f16.snapshot default.snapshot
+
+          ls -al
+
       - name: Build rag-api-server on linux
         env:
           RUSTFLAGS: "--cfg wasmedge --cfg tokio_unstable"
@@ -75,7 +90,7 @@ jobs:
 
       - name: Start rag-api-server for testing chat completions
         run: |
-          nohup $HOME/.wasmedge/bin/wasmedge --dir .:. --nn-preload default:GGML:AUTO:Qwen2-1.5B-Instruct-Q3_K_M.gguf --nn-preload embedding:GGML:AUTO:nomic-embed-text-v1.5-f16.gguf rag-api-server.wasm --model-name Qwen2-1.5B-Instruct,nomic-embed-text-v1.5 --ctx-size 4096,512 --batch-size 16,512 --prompt-template chatml,embedding --socket-addr 0.0.0.0:8080 > ./start-llamaedge.log 2>&1 &
+          nohup $HOME/.wasmedge/bin/wasmedge --dir .:. --nn-preload default:GGML:AUTO:Qwen2-1.5B-Instruct-Q3_K_M.gguf --nn-preload embedding:GGML:AUTO:nomic-embed-text-v1.5-f16.gguf rag-api-server.wasm --model-name Qwen2-1.5B-Instruct,nomic-embed-text-v1.5 --ctx-size 4096,512 --batch-size 16,512 --prompt-template chatml,embedding --rag-policy last-user-message --socket-addr 0.0.0.0:8080 > ./start-llamaedge.log 2>&1 &
           sleep 10
           cat start-llamaedge.log
 
@@ -87,6 +102,24 @@ jobs:
         run: |
           hurl --test --jobs 1 ./tests/test_embeddings.hurl
 
+      - name: Start Qdrant
+        run: |
+          nohup ./qdrant  > ./start-qdrant.log 2>&1 &
+          sleep 5
+          cat start-qdrant.log
+
+      - name: Import the default.snapshot file to Qdrant
+        run: |
+          curl -s -X POST http://localhost:6333/collections/default/snapshots/upload?priority=snapshot -H 'Content-Type:multipart/form-data' -F 'snapshot=@default.snapshot'
+
+      - name: Run test_rag.hurl
+        run: |
+          hurl --test --jobs 1 ./tests/test_rag.hurl
+
       - name: Stop rag-api-server for testing chat completions
         run: |
           pkill -f wasmedge
+
+      - name: Stop Qdrant
+        run: |
+          pkill -f qdrant
