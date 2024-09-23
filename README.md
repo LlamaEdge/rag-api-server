@@ -509,7 +509,9 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
       --chunk-capacity <CHUNK_CAPACITY>
           Maximum number of tokens each chunk contains [default: 100]
       --socket-addr <SOCKET_ADDR>
-          Socket address of LlamaEdge API Server instance [default: 0.0.0.0:8080]
+          Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`
+      --port <PORT>
+          Port number [default: 8080]
       --web-ui <WEB_UI>
           Root path for the Web UI files [default: chatbot-ui]
       --log-prompts
