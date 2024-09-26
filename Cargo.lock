@@ -1160,9 +1160,9 @@ checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
 name = "llama-core"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bb73ccdb8e713335fe1e7d7729577bd7e37ffca31190d934a5816860c001ba3"
+checksum = "8fe1add2b5fcad1046672f61b4decd862f62f3ecb0771d655b11adeef8e2f346"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
@@ -3037,9 +3037,9 @@ dependencies = [
 
 [[package]]
 name = "wasmedge_stable_diffusion"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aa2bb892d5a35a4bd384d163380aa24df0df6f64a348e989fe42cc47bc100cf"
+checksum = "3ee9203ae57b63c9f0d71c2600177274f420282050cb7635b44416198bf55931"
 dependencies = [
  "thiserror",
 ]
