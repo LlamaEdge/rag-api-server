@@ -133,6 +133,7 @@ struct Cli {
     log_all: bool,
 }
 
+#[allow(clippy::needless_return)]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), ServerError> {
     let mut plugin_debug = false;
