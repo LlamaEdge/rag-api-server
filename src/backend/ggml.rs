@@ -114,11 +114,11 @@ pub(crate) async fn embeddings_handler(mut req: Request<Body>) -> Response<Body>
     let mut embedding_request: EmbeddingRequest = match serde_json::from_slice(&body_bytes) {
         Ok(embedding_request) => embedding_request,
         Err(e) => {
-            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                error!(target: "stdout", "json_value: {}", json_value);
-            }
+            let mut err_msg = format!("Fail to deserialize embedding request: {}.", e);
 
-            let err_msg = format!("Fail to deserialize embedding request: {msg}", msg = e);
+            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                err_msg = format!("{}\njson_value: {}", err_msg, json_value);
+            }
 
             // log
             error!(target: "stdout", "{}", &err_msg);
@@ -230,11 +230,11 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     let mut chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
         Ok(chat_request) => chat_request,
         Err(e) => {
-            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                error!(target: "stdout", "json_value: {}", json_value);
-            }
+            let mut err_msg = format!("Fail to deserialize chat completion request: {}.", e);
 
-            let err_msg = format!("Fail to deserialize chat completion request: {}", e);
+            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                err_msg = format!("{}\njson_value: {}", err_msg, json_value);
+            }
 
             // log
             error!(target: "stdout", "{}", &err_msg);
@@ -1170,11 +1170,11 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
     let chunks_request: ChunksRequest = match serde_json::from_slice(&body_bytes) {
         Ok(chunks_request) => chunks_request,
         Err(e) => {
-            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                error!(target: "stdout", "json_value: {}", json_value);
-            }
+            let mut err_msg = format!("Fail to deserialize chunks request: {}.", e);
 
-            let err_msg = format!("Fail to deserialize chunks request: {msg}", msg = e);
+            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                err_msg = format!("{}\njson_value: {}", err_msg, json_value);
+            }
 
             // log
             error!(target: "stdout", "{}", &err_msg);
@@ -1780,14 +1780,11 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     let mut chat_request: ChatCompletionRequest = match serde_json::from_slice(&body_bytes) {
         Ok(chat_request) => chat_request,
         Err(e) => {
-            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                error!(target: "stdout", "json_value: {}", json_value);
-            }
+            let mut err_msg = format!("Fail to deserialize chat completion request: {}.", e);
 
-            let err_msg = format!(
-                "Fail to deserialize chat completion request: {msg}",
-                msg = e
-            );
+            if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+                err_msg = format!("{}\njson_value: {}", err_msg, json_value);
+            }
 
             // log
             error!(target: "stdout", "{}", &err_msg);
