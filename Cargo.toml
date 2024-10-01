@@ -13,7 +13,7 @@ endpoints = { version = "=0.15.0" }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
 futures-util = "0.3"
 hyper = { version = "0.14", features = ["full"] }
-llama-core = { version = "=0.19.1", features = ["logging"] }
+llama-core = { version = "=0.19.2", features = ["logging"] }
 log = { version = "0.4.21", features = ["std", "kv", "kv_serde"] }
 mime_guess = "2.0.4"
 multipart-2021 = "0.19.0"
