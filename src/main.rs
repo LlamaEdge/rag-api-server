@@ -415,9 +415,6 @@ async fn main() -> Result<(), ServerError> {
     };
     let port = addr.port().to_string();
 
-    // log socket address
-    info!(target: "stdout", "socket_address: {}", addr.to_string());
-
     // get the environment variable `NODE_VERSION`
     // Note that this is for satisfying the requirement of `gaianet-node` project.
     let node = std::env::var("NODE_VERSION").ok();
