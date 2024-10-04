@@ -1318,7 +1318,7 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
     res
 }
 
-pub(crate) async fn doc_to_embeddings_handler(
+pub(crate) async fn create_rag_handler(
     req: Request<Body>,
     chunk_capacity: usize,
 ) -> Response<Body> {
@@ -1577,7 +1577,7 @@ pub(crate) async fn doc_to_embeddings_handler(
 
         info!(target: "stdout", "Chunk the file contents.");
 
-        match llama_core::rag::chunk_text(&contents, extension, chunk_capacity) {
+        let chunks = match llama_core::rag::chunk_text(&contents, extension, chunk_capacity) {
             Ok(chunks) => chunks,
             Err(e) => {
                 let err_msg = e.to_string();
@@ -1587,7 +1587,55 @@ pub(crate) async fn doc_to_embeddings_handler(
 
                 return error::internal_server_error(err_msg);
             }
+        };
+
+        let mut chunks_with_ctx = Vec::new();
+        for chunk in &chunks {
+            info!(target: "stdout", "chunk: {}", chunk);
+
+            let user_query = format!("<document>\n{whole_document}\n</document>\nHere is the chunk we want to situate within the whole document:\n<chunk>\n{chunk_content}\n</chunk>\nPlease provide a short succinct context to situate this chunk within the overall document to improve search retrieval of this chunk. Answer only with the succinct context and nothing else.", whole_document = contents, chunk_content = chunk);
+
+            let mut request = ChatCompletionRequest {
+                messages: vec![ChatCompletionRequestMessage::new_user_message(
+                    ChatCompletionUserMessageContent::Text(user_query),
+                    None,
+                )],
+                ..Default::default()
+            };
+
+            let response = match llama_core::chat::chat(&mut request).await {
+                Ok(response) => response,
+                Err(e) => {
+                    let err_msg = e.to_string();
+
+                    // log
+                    error!(target: "stdout", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
+                }
+            };
+
+            match response {
+                either::Either::Right(chat_completion_object) => {
+                    let content = chat_completion_object.choices[0]
+                        .message
+                        .content
+                        .clone()
+                        .unwrap_or_default();
+
+                    // log
+                    info!(target: "stdout", "succinct context: {}", &content);
+
+                    // combine the chunk with the context
+                    let chunk_with_ctx = format!("{} {}", content, chunk);
+
+                    chunks_with_ctx.push(chunk_with_ctx);
+                }
+                either::Either::Left(_) => unimplemented!(),
+            }
         }
+
+        chunks_with_ctx
     };
 
     // compute embeddings for chunks
