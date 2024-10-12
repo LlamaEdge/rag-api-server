@@ -16,7 +16,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server, StatusCode,
 };
-use llama_core::MetadataBuilder;
+use llama_core::metadata::ggml::GgmlMetadataBuilder;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
@@ -307,7 +307,7 @@ async fn main() -> Result<(), ServerError> {
     }
 
     // create metadata for chat model
-    let chat_metadata = MetadataBuilder::new(
+    let chat_metadata = GgmlMetadataBuilder::new(
         cli.model_name[0].clone(),
         cli.model_alias[0].clone(),
         cli.prompt_template[0],
@@ -346,7 +346,7 @@ async fn main() -> Result<(), ServerError> {
     let chat_models = [chat_metadata];
 
     // create metadata for embedding model
-    let embedding_metadata = MetadataBuilder::new(
+    let embedding_metadata = GgmlMetadataBuilder::new(
         cli.model_name[1].clone(),
         cli.model_alias[1].clone(),
         cli.prompt_template[1],
