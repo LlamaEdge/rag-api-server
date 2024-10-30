@@ -387,7 +387,7 @@ async fn main() -> Result<(), ServerError> {
     };
 
     // initialize the core context
-    llama_core::init_rag_core_context(&chat_models[..], &embedding_models[..]).map_err(|e| {
+    llama_core::init_ggml_rag_context(&chat_models[..], &embedding_models[..]).map_err(|e| {
         let err_msg = format!("Failed to initialize the core context. {}", e);
 
         // log
