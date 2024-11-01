@@ -1293,9 +1293,9 @@ checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
 name = "llama-core"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f02cd22711c01952fd45aa14e56300c3b8ee0de98c6e435b0bb938447b5366"
+checksum = "add84ecb61537b4f57c9d5d9c8543db3a85ca2c8e8fca5a3524cf43f02342502"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
