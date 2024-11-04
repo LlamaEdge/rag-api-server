@@ -29,6 +29,8 @@ type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
 // server info
 pub(crate) static SERVER_INFO: OnceCell<ServerInfo> = OnceCell::new();
+// allow multi-retrieval
+pub(crate) static MULTI_RETRIEVAL: OnceCell<bool> = OnceCell::new();
 
 // default port
 const DEFAULT_PORT: &str = "8080";
@@ -113,6 +115,9 @@ struct Cli {
     /// Maximum number of tokens each chunk contains
     #[arg(long, default_value = "100", value_parser = clap::value_parser!(usize))]
     chunk_capacity: usize,
+    /// Allow multi-retrieval
+    #[arg(long, default_value = "true")]
+    multi_retrieval: bool,
     /// Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`.
     #[arg(long, default_value = None, value_parser = clap::value_parser!(SocketAddr), group = "socket_address_group")]
     socket_addr: Option<SocketAddr>,
@@ -294,6 +299,12 @@ async fn main() -> Result<(), ServerError> {
 
     // log chunk capacity
     info!(target: "stdout", "chunk_capacity: {}", &cli.chunk_capacity);
+
+    // log multi-retrieval
+    info!(target: "stdout", "multi_retrieval: {}", &cli.multi_retrieval);
+    MULTI_RETRIEVAL
+        .set(cli.multi_retrieval)
+        .map_err(|_| ServerError::Operation("Failed to set `MULTI_RETRIEVAL`.".to_string()))?;
 
     // RAG policy
     info!(target: "stdout", "rag_policy: {}", &cli.policy);

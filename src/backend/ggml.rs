@@ -1,8 +1,10 @@
-use crate::{error, utils::gen_chat_id, GLOBAL_RAG_PROMPT, SERVER_INFO};
+use crate::{
+    error, utils::gen_chat_id, ServerInfo, GLOBAL_RAG_PROMPT, MULTI_RETRIEVAL, SERVER_INFO,
+};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
-    embeddings::EmbeddingRequest,
+    embeddings::{EmbeddingRequest, InputText},
     files::{DeleteFileStatus, FileObject, ListFilesResponse},
     rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest, RetrieveObject},
 };
@@ -267,168 +269,63 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         }
     };
 
-    info!(target: "stdout", "Compute embeddings for user query.");
-
-    // * compute embeddings for user query
-    let embedding_response = match chat_request.messages.is_empty() {
-        true => {
-            let err_msg = "Messages should not be empty.";
-
-            // log
-            error!(target: "stdout", "{}", &err_msg);
-
-            return error::bad_request(err_msg);
+    // * perform retrieval
+    let mut retrieve_object = match retrieve_context(&mut chat_request, server_info).await {
+        Ok(retrieve_object) => retrieve_object,
+        Err(response) => {
+            return response;
         }
-        false => {
-            let last_message = chat_request.messages.last().unwrap();
-            match last_message {
-                ChatCompletionRequestMessage::User(user_message) => {
-                    let query_text = match user_message.content() {
-                        ChatCompletionUserMessageContent::Text(text) => text,
-                        _ => {
-                            let err_msg = "The last message must be a text content user message";
+    };
 
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
+    // keep the point with the highest score
+    let scored_points = retrieve_object.points.as_mut().unwrap();
 
-                            return error::bad_request(err_msg);
-                        }
-                    };
+    for (idx, point) in scored_points.iter().enumerate() {
+        // log
+        info!(target: "stdout", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
+    }
 
+    // remove all points which have different score from the first point
+    if scored_points.len() > 1 {
+        let first_score = scored_points[0].score;
+        scored_points.retain(|point| point.score == first_score);
+    }
+
+    info!(target: "stdout", "{} point(s) with the highest score kept", scored_points.len());
+
+    // * update messages with retrieved context
+    match retrieve_object.points {
+        Some(scored_points) => {
+            match scored_points.is_empty() {
+                true => {
                     // log
-                    info!(target: "stdout", "query text: {}", query_text);
-
-                    // get the available embedding models
-                    let embedding_model_names = match llama_core::utils::embedding_model_names() {
-                        Ok(model_names) => model_names,
-                        Err(e) => {
-                            let err_msg = e.to_string();
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::internal_server_error(err_msg);
-                        }
-                    };
-
-                    // create a embedding request
-                    let embedding_request = EmbeddingRequest {
-                        model: embedding_model_names[0].clone(),
-                        input: query_text.into(),
-                        encoding_format: None,
-                        user: chat_request.user.clone(),
-                    };
-
-                    let rag_embedding_request = RagEmbeddingRequest {
-                        embedding_request,
-                        qdrant_url: server_info.qdrant_config.url.clone(),
-                        qdrant_collection_name: server_info.qdrant_config.collection_name.clone(),
-                    };
-
-                    // compute embeddings for query
-                    match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
-                        Ok(embedding_response) => embedding_response,
-                        Err(e) => {
-                            let err_msg = e.to_string();
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::internal_server_error(err_msg);
-                        }
-                    }
+                    warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
                 }
-                _ => {
-                    let err_msg = "The last message must be a user message";
-
-                    // log
-                    error!(target: "stdout", "{}", &err_msg);
-
-                    return error::bad_request(err_msg);
-                }
-            }
-        }
-    };
-    let query_embedding: Vec<f32> = match embedding_response.data.first() {
-        Some(embedding) => embedding.embedding.iter().map(|x| *x as f32).collect(),
-        None => {
-            let err_msg = "No embeddings returned";
-
-            // log
-            error!(target: "stdout", "{}", &err_msg);
-
-            return error::internal_server_error(err_msg);
-        }
-    };
-
-    // * retrieve context
-    let res = match llama_core::rag::rag_retrieve_context(
-        query_embedding.as_slice(),
-        server_info.qdrant_config.url.to_string().as_str(),
-        server_info.qdrant_config.collection_name.as_str(),
-        server_info.qdrant_config.limit as usize,
-        Some(server_info.qdrant_config.score_threshold),
-    )
-    .await
-    {
-        Ok(search_result) => Some(search_result),
-        Err(e) => {
-            // log
-            error!(target: "stdout", "No point retrieved. {}", e);
-
-            None
-        }
-    };
-
-    if let Some(ro) = res {
-        match ro.points {
-            Some(scored_points) => {
-                match scored_points.is_empty() {
-                    true => {
+                false => {
+                    // update messages with retrieved context
+                    let mut context = String::new();
+                    for (idx, point) in scored_points.iter().enumerate() {
                         // log
-                        warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
+                        info!(target: "stdout", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
+
+                        context.push_str(&point.source);
+                        context.push_str("\n\n");
                     }
-                    false => {
-                        // update messages with retrieved context
-                        let mut context = String::new();
-                        for (idx, point) in scored_points.iter().enumerate() {
-                            // log
-                            info!(target: "stdout", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
 
-                            context.push_str(&point.source);
-                            context.push_str("\n\n");
-                        }
+                    if chat_request.messages.is_empty() {
+                        let err_msg = "No message in the chat request.";
 
-                        if chat_request.messages.is_empty() {
-                            let err_msg = "No message in the chat request.";
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
 
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
+                        return error::internal_server_error(err_msg);
+                    }
 
-                            return error::internal_server_error(err_msg);
-                        }
-
-                        let prompt_template = match llama_core::utils::chat_prompt_template(
-                            chat_request.model.as_deref(),
-                        ) {
-                            Ok(prompt_template) => prompt_template,
-                            Err(e) => {
-                                let err_msg = e.to_string();
-
-                                // log
-                                error!(target: "stdout", "{}", &err_msg);
-
-                                return error::internal_server_error(err_msg);
-                            }
-                        };
-
-                        // insert rag context into chat request
-                        if let Err(e) = RagPromptBuilder::build(
-                            &mut chat_request.messages,
-                            &[context],
-                            prompt_template.has_system_prompt(),
-                            server_info.rag_config.policy,
-                        ) {
+                    let prompt_template = match llama_core::utils::chat_prompt_template(
+                        chat_request.model.as_deref(),
+                    ) {
+                        Ok(prompt_template) => prompt_template,
+                        Err(e) => {
                             let err_msg = e.to_string();
 
                             // log
@@ -436,18 +333,33 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
 
                             return error::internal_server_error(err_msg);
                         }
+                    };
+
+                    // insert rag context into chat request
+                    if let Err(e) = RagPromptBuilder::build(
+                        &mut chat_request.messages,
+                        &[context],
+                        prompt_template.has_system_prompt(),
+                        server_info.rag_config.policy,
+                    ) {
+                        let err_msg = e.to_string();
+
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
                     }
                 }
             }
-            None => {
-                // log
-                warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
-                ));
-            }
+        }
+        None => {
+            // log
+            warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
+            ));
         }
     }
 
-    // chat completion
+    // * perform chat completion
     let res = match llama_core::chat::chat(&mut chat_request).await {
         Ok(result) => match result {
             either::Left(stream) => {
@@ -539,6 +451,286 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     res
 }
 
+async fn retrieve_context(
+    chat_request: &mut ChatCompletionRequest,
+    server_info: &ServerInfo,
+) -> Result<RetrieveObject, Response<Body>> {
+    info!(target: "stdout", "Compute embeddings for user query.");
+
+    // * compute embeddings for user query
+    let embedding_response = match chat_request.messages.is_empty() {
+        true => {
+            let err_msg = "Messages should not be empty.";
+
+            // log
+            error!(target: "stdout", "{}", &err_msg);
+
+            return Err(error::bad_request(err_msg));
+        }
+        false => {
+            let last_message = chat_request.messages.last().unwrap();
+            match last_message {
+                ChatCompletionRequestMessage::User(user_message) => {
+                    let query_text = match user_message.content() {
+                        ChatCompletionUserMessageContent::Text(text) => text,
+                        _ => {
+                            let err_msg = "The last message must be a text content user message";
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return Err(error::bad_request(err_msg));
+                        }
+                    };
+
+                    // log
+                    info!(target: "stdout", "query text: {}", query_text);
+
+                    // get the available embedding models
+                    let embedding_model_names = match llama_core::utils::embedding_model_names() {
+                        Ok(model_names) => model_names,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return Err(error::internal_server_error(err_msg));
+                        }
+                    };
+
+                    // create a embedding request
+                    let embedding_request = EmbeddingRequest {
+                        model: embedding_model_names[0].clone(),
+                        input: query_text.into(),
+                        encoding_format: None,
+                        user: chat_request.user.clone(),
+                    };
+
+                    let rag_embedding_request = RagEmbeddingRequest {
+                        embedding_request,
+                        qdrant_url: server_info.qdrant_config.url.clone(),
+                        qdrant_collection_name: server_info.qdrant_config.collection_name.clone(),
+                    };
+
+                    // compute embeddings for query
+                    match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
+                        Ok(embedding_response) => embedding_response,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return Err(error::internal_server_error(err_msg));
+                        }
+                    }
+                }
+                _ => {
+                    let err_msg = "The last message must be a user message";
+
+                    // log
+                    error!(target: "stdout", "{}", &err_msg);
+
+                    return Err(error::bad_request(err_msg));
+                }
+            }
+        }
+    };
+    let query_embedding: Vec<f32> = match embedding_response.data.first() {
+        Some(embedding) => embedding.embedding.iter().map(|x| *x as f32).collect(),
+        None => {
+            let err_msg = "No embeddings returned";
+
+            // log
+            error!(target: "stdout", "{}", &err_msg);
+
+            return Err(error::internal_server_error(err_msg));
+        }
+    };
+
+    // perform the first round retrieval (using the last user message)
+    let mut retrieve_object = RetrieveObject::default();
+    match llama_core::rag::rag_retrieve_context(
+        query_embedding.as_slice(),
+        server_info.qdrant_config.url.to_string().as_str(),
+        server_info.qdrant_config.collection_name.as_str(),
+        server_info.qdrant_config.limit as usize,
+        Some(server_info.qdrant_config.score_threshold),
+    )
+    .await
+    {
+        Ok(search_result) => {
+            retrieve_object = search_result;
+            if retrieve_object.points.is_none() {
+                retrieve_object.points = Some(Vec::new());
+            }
+
+            info!(target: "stdout", "{} point(s) retrieved from the first retrieval", retrieve_object.points.as_ref().unwrap().len());
+        }
+        Err(e) => {
+            // log
+            error!(target: "stdout", "No point retrieved. {}", e);
+        }
+    };
+
+    // perform the second round retrieval (using the last 3 user messages)
+    if let Some(multi_retrieval) = MULTI_RETRIEVAL.get() {
+        if *multi_retrieval {
+            let embedding_response_second_retrieval = match chat_request.messages.is_empty() {
+                true => {
+                    let err_msg = "Messages should not be empty.";
+
+                    // log
+                    error!(target: "stdout", "{}", &err_msg);
+
+                    return Err(error::bad_request(err_msg));
+                }
+                false => {
+                    // get the last 3 user messages
+                    let mut last_messages = Vec::new();
+                    for message in chat_request.messages.iter().rev() {
+                        if let ChatCompletionRequestMessage::User(user_message) = message {
+                            let user_content = match user_message.content() {
+                                ChatCompletionUserMessageContent::Text(text) => text,
+                                _ => {
+                                    let err_msg =
+                                        "The last message must be a text content user message";
+
+                                    // log
+                                    error!(target: "stdout", "{}", &err_msg);
+
+                                    return Err(error::bad_request(err_msg));
+                                }
+                            };
+
+                            last_messages.push(user_content.clone());
+                        }
+
+                        if last_messages.len() == 3 {
+                            break;
+                        }
+                    }
+
+                    info!(target: "stdout", "Found the latest {} user messages.", last_messages.len());
+
+                    // join the last 3 user messages into a single string
+                    let query_text = last_messages.join("\n");
+
+                    // log
+                    info!(target: "stdout", "query text for the second retrieval: {}", query_text);
+
+                    // get the available embedding models
+                    let embedding_model_names = match llama_core::utils::embedding_model_names() {
+                        Ok(model_names) => model_names,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return Err(error::internal_server_error(err_msg));
+                        }
+                    };
+
+                    // create a embedding request
+                    let embedding_request = EmbeddingRequest {
+                        model: embedding_model_names[0].clone(),
+                        input: InputText::String(query_text),
+                        encoding_format: None,
+                        user: chat_request.user.clone(),
+                    };
+
+                    let rag_embedding_request = RagEmbeddingRequest {
+                        embedding_request,
+                        qdrant_url: server_info.qdrant_config.url.clone(),
+                        qdrant_collection_name: server_info.qdrant_config.collection_name.clone(),
+                    };
+
+                    // compute embeddings for query
+                    match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
+                        Ok(embedding_response) => embedding_response,
+                        Err(e) => {
+                            let err_msg = e.to_string();
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return Err(error::internal_server_error(err_msg));
+                        }
+                    }
+                }
+            };
+
+            // compute embeddings for the multiple user messages
+            let query_embedding_second_retrieval: Vec<f32> =
+                match embedding_response_second_retrieval.data.first() {
+                    Some(embedding) => embedding.embedding.iter().map(|x| *x as f32).collect(),
+                    None => {
+                        let err_msg = "No embeddings returned";
+
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return Err(error::internal_server_error(err_msg));
+                    }
+                };
+
+            // perform the second retrieval
+            match llama_core::rag::rag_retrieve_context(
+                query_embedding_second_retrieval.as_slice(),
+                server_info.qdrant_config.url.to_string().as_str(),
+                server_info.qdrant_config.collection_name.as_str(),
+                server_info.qdrant_config.limit as usize,
+                Some(server_info.qdrant_config.score_threshold),
+            )
+            .await
+            {
+                Ok(retrieve_object_second_retrieval) => {
+                    match retrieve_object_second_retrieval.points {
+                        Some(scored_points) if !scored_points.is_empty() => {
+                            info!(target: "stdout", "{} point(s) retrieved from the second retrieval", scored_points.len());
+
+                            if let Some(points) = retrieve_object.points.as_mut() {
+                                points.extend(scored_points);
+                            }
+                        }
+                        _ => {
+                            warn!(target: "stdout", "No point retrieved from the second retrieval");
+                        }
+                    }
+                }
+                Err(e) => {
+                    // log
+                    error!(target: "stdout", "No point retrieved from the second retrieval. {}", e);
+                }
+            };
+        }
+    }
+
+    info!(target: "stdout", "{} point(s) retrieved from the two rounds of retrieval", retrieve_object.points.as_ref().unwrap().len());
+
+    // sort the points by score
+    retrieve_object.points.as_mut().unwrap().sort_by(|a, b| {
+        // Compare scores in reverse order (highest first)
+        // Using partial_cmp for floating point comparison
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // remove the duplicate points
+    retrieve_object
+        .points
+        .as_mut()
+        .unwrap()
+        .dedup_by_key(|point| point.source.clone());
+
+    info!(target: "stdout", "{} point(s) kept after removing duplicates", retrieve_object.points.as_ref().unwrap().len());
+
+    Ok(retrieve_object)
+}
+
 #[derive(Debug, Default)]
 struct RagPromptBuilder;
 impl MergeRagContext for RagPromptBuilder {
@@ -571,11 +763,9 @@ impl MergeRagContext for RagPromptBuilder {
 
             return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
         }
-
         info!(target: "stdout", "rag_policy: {}", &policy);
 
         let context = context[0].trim_end();
-
         info!(target: "stdout", "context:\n{}", context);
 
         match policy {
@@ -592,8 +782,12 @@ impl MergeRagContext for RagPromptBuilder {
                                         "{system_message}\n{rag_prompt}\n{context}",
                                         system_message = message.content().trim(),
                                         rag_prompt = global_rag_prompt.to_owned(),
-                                        context = context.trim_end()
+                                        context = context
                                     );
+
+                                    // log
+                                    info!(target: "stdout", "system message with RAG context: {}", &content);
+
                                     // create system message
                                     ChatCompletionRequestMessage::new_system_message(
                                         content,
@@ -605,8 +799,12 @@ impl MergeRagContext for RagPromptBuilder {
                                     let content = format!(
                                         "{system_message}\n{context}",
                                         system_message = message.content().trim(),
-                                        context = context.trim_end()
+                                        context = context
                                     );
+
+                                    // log
+                                    info!(target: "stdout", "system message with RAG context: {}", &content);
+
                                     // create system message
                                     ChatCompletionRequestMessage::new_system_message(
                                         content,
@@ -626,14 +824,22 @@ impl MergeRagContext for RagPromptBuilder {
                                 let content = format!(
                                     "{rag_prompt}\n{context}",
                                     rag_prompt = global_rag_prompt.to_owned(),
-                                    context = context.trim_end()
+                                    context = context
                                 );
+
+                                // log
+                                info!(target: "stdout", "system message with RAG context: {}", &content);
+
                                 // create system message
                                 ChatCompletionRequestMessage::new_system_message(content, None)
                             }
                             None => {
                                 // compose new system message content
-                                let content = context.trim_end().to_string();
+                                let content = context.to_string();
+
+                                // log
+                                info!(target: "stdout", "system message with RAG context: {}", &content);
+
                                 // create system message
                                 ChatCompletionRequestMessage::new_system_message(content, None)
                             }
@@ -654,9 +860,12 @@ impl MergeRagContext for RagPromptBuilder {
                             // compose new user message content
                             let content = format!(
                                     "{context}\nAnswer the question based on the pieces of context above. The question is:\n{user_message}",
-                                    context = context.trim_end(),
+                                    context = context,
                                     user_message = content.trim(),
                                 );
+
+                            // log
+                            info!(target: "stdout", "last user message with RAG context: {}", &content);
 
                             let content = ChatCompletionUserMessageContent::Text(content);
 
@@ -1813,187 +2022,45 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
         }
     };
 
-    info!(target: "stdout", "Compute embeddings for user query.");
-
-    // * compute embeddings for user query
-    let embedding_response = match chat_request.messages.is_empty() {
-        true => {
-            let err_msg = "Messages should not be empty.";
-
-            // log
-            error!(target: "stdout", "{}", &err_msg);
-
-            return error::bad_request(err_msg);
-        }
-        false => {
-            let last_message = chat_request.messages.last().unwrap();
-            match last_message {
-                ChatCompletionRequestMessage::User(user_message) => {
-                    let query_text = match user_message.content() {
-                        ChatCompletionUserMessageContent::Text(text) => text,
-                        _ => {
-                            let err_msg = "The last message must be a text content user message";
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::bad_request(err_msg);
-                        }
-                    };
-
-                    // log
-                    info!(target: "stdout", "query_text: {}", query_text);
-
-                    // get the available embedding models
-                    let embedding_model_names = match llama_core::utils::embedding_model_names() {
-                        Ok(model_names) => model_names,
-                        Err(e) => {
-                            let err_msg = e.to_string();
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::internal_server_error(err_msg);
-                        }
-                    };
-
-                    // create a embedding request
-                    let embedding_request = EmbeddingRequest {
-                        model: embedding_model_names[0].clone(),
-                        input: query_text.into(),
-                        encoding_format: None,
-                        user: chat_request.user.clone(),
-                    };
-
-                    let rag_embedding_request = RagEmbeddingRequest {
-                        embedding_request,
-                        qdrant_url: server_info.qdrant_config.url.clone(),
-                        qdrant_collection_name: server_info.qdrant_config.collection_name.clone(),
-                    };
-
-                    // compute embeddings for query
-                    match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
-                        Ok(embedding_response) => embedding_response,
-                        Err(e) => {
-                            let err_msg = e.to_string();
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::internal_server_error(err_msg);
-                        }
-                    }
-                }
-                _ => {
-                    let err_msg = "The last message must be a user message";
-
-                    // log
-                    error!(target: "stdout", "{}", &err_msg);
-
-                    return error::bad_request(err_msg);
-                }
-            }
-        }
-    };
-    let query_embedding: Vec<f32> = match embedding_response.data.first() {
-        Some(embedding) => embedding.embedding.iter().map(|x| *x as f32).collect(),
-        None => {
-            let err_msg = "No embeddings returned";
-
-            // log
-            error!(target: "stdout", "{}", &err_msg);
-
-            return error::internal_server_error(err_msg);
+    let retrieve_object = match retrieve_context(&mut chat_request, server_info).await {
+        Ok(retrieve_object) => retrieve_object,
+        Err(response) => {
+            return response;
         }
     };
 
-    // * retrieve context
-    let res = match llama_core::rag::rag_retrieve_context(
-        query_embedding.as_slice(),
-        server_info.qdrant_config.url.to_string().as_str(),
-        server_info.qdrant_config.collection_name.as_str(),
-        server_info.qdrant_config.limit as usize,
-        Some(server_info.qdrant_config.score_threshold),
-    )
-    .await
-    {
-        Ok(ro) => {
-            // serialize retrieve object
-            let s = match serde_json::to_string(&ro) {
-                Ok(s) => s,
-                Err(e) => {
-                    let err_msg = format!("Fail to serialize retrieve object. {}", e);
+    let res = {
+        // serialize retrieve object
+        let s = match serde_json::to_string(&retrieve_object) {
+            Ok(s) => s,
+            Err(e) => {
+                let err_msg = format!("Fail to serialize retrieve object. {}", e);
 
-                    // log
-                    error!(target: "stdout", "{}", &err_msg);
+                // log
+                error!(target: "stdout", "{}", &err_msg);
 
-                    return error::internal_server_error(err_msg);
-                }
-            };
-
-            // return response
-            let result = Response::builder()
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .header("Content-Type", "application/json")
-                .header("user", id)
-                .body(Body::from(s));
-
-            match result {
-                Ok(response) => response,
-                Err(e) => {
-                    let err_msg = e.to_string();
-
-                    // log
-                    error!(target: "stdout", "{}", &err_msg);
-
-                    error::internal_server_error(e.to_string())
-                }
+                return error::internal_server_error(err_msg);
             }
-        }
-        Err(e) => {
-            // log
-            error!(target: "stdout", "{}", e);
+        };
 
-            let ro = RetrieveObject {
-                points: None,
-                limit: server_info.qdrant_config.limit as usize,
-                score_threshold: server_info.qdrant_config.score_threshold,
-            };
+        // return response
+        let result = Response::builder()
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "*")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Content-Type", "application/json")
+            .header("user", id)
+            .body(Body::from(s));
 
-            // serialize retrieve object
-            let s = match serde_json::to_string(&ro) {
-                Ok(s) => s,
-                Err(e) => {
-                    let err_msg = format!("Fail to serialize retrieve object. {}", e);
+        match result {
+            Ok(response) => response,
+            Err(e) => {
+                let err_msg = e.to_string();
 
-                    // log
-                    error!(target: "stdout", "{}", &err_msg);
+                // log
+                error!(target: "stdout", "{}", &err_msg);
 
-                    return error::internal_server_error(err_msg);
-                }
-            };
-
-            // return response
-            let result = Response::builder()
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .header("Content-Type", "application/json")
-                .header("user", id)
-                .body(Body::from(s));
-
-            match result {
-                Ok(response) => response,
-                Err(e) => {
-                    let err_msg = e.to_string();
-
-                    // log
-                    error!(target: "stdout", "{}", &err_msg);
-
-                    error::internal_server_error(e.to_string())
-                }
+                error::internal_server_error(e.to_string())
             }
         }
     };
