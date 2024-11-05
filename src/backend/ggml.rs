@@ -1,6 +1,4 @@
-use crate::{
-    error, utils::gen_chat_id, ServerInfo, GLOBAL_RAG_PROMPT, MULTI_RETRIEVAL, SERVER_INFO,
-};
+use crate::{error, utils::gen_chat_id, ServerInfo, GLOBAL_RAG_PROMPT, SERVER_INFO};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
@@ -486,7 +484,7 @@ async fn retrieve_context(
             }
 
             // join the user messages in the context window into a single string
-            let query_text = if last_messages.len() > 0 {
+            let query_text = if !last_messages.is_empty() {
                 info!(target: "stdout", "Found the latest {} user messages.", last_messages.len());
 
                 last_messages.reverse();
