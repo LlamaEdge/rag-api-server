@@ -31,7 +31,7 @@ on:
       - 'tests/*.hurl'
 
 jobs:
-  test-api-server:
+  test-api-server-ubuntu:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -123,3 +123,105 @@ jobs:
       - name: Stop Qdrant
         run: |
           pkill -f qdrant
+
+  test-api-server-on-macos-13:
+    runs-on: macos-13
+    needs: test-api-server-ubuntu
+    strategy:
+      matrix:
+        wasmedge_version: [0.14.1]
+    steps:
+      - name: Clone project
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Install Rust-nightly
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: wasm32-wasip1
+          components: rustfmt, clippy
+
+      - name: Install Rust-stable
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-wasip1
+
+      - name: Download wasi-sdk for x86_64-macos
+        run: |
+          curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-macos.tar.gz
+          tar -xzvf wasi-sdk-24.0-x86_64-macos.tar.gz
+          mv wasi-sdk-24.0-x86_64-macos wasi-sdk-24.0
+
+      - name: Install WasmEdge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }}
+          ls -al $HOME/.wasmedge/bin
+
+      - name: Install Hurl
+        run: |
+          brew install hurl
+
+      - name: Install Qdrant and download snapshot
+        run: |
+          # Download Qdrant
+          curl -LO https://github.com/qdrant/qdrant/releases/download/v1.11.4/qdrant-x86_64-apple-darwin.tar.gz
+          tar -xzvf qdrant-x86_64-apple-darwin.tar.gz
+          rm qdrant-x86_64-apple-darwin.tar.gz
+
+          # Download snapshot
+          curl -LO https://huggingface.co/datasets/gaianet/paris/resolve/main/paris_768_nomic-embed-text-v1.5-f16.snapshot
+          mv paris_768_nomic-embed-text-v1.5-f16.snapshot default.snapshot
+
+          ls -al
+
+      - name: Build rag-api-server on macos-13
+        env:
+          WASI_SDK_PATH: /Users/runner/work/LlamaEdge/LlamaEdge/wasi-sdk-24.0
+          CC: "/Users/runner/work/LlamaEdge/LlamaEdge/wasi-sdk-24.0/bin/clang --sysroot=/Users/runner/work/LlamaEdge/LlamaEdge/wasi-sdk-24.0/share/wasi-sysroot"
+          RUSTFLAGS: "--cfg wasmedge --cfg tokio_unstable"
+        run: |
+          cargo build -p rag-api-server --release
+          cp target/wasm32-wasip1/release/rag-api-server.wasm ./rag-api-server.wasm
+
+      - name: Download models
+        run: |
+          curl -LO https://huggingface.co/second-state/Qwen2-1.5B-Instruct-GGUF/resolve/main/Qwen2-1.5B-Instruct-Q3_K_M.gguf
+          curl -LO https://huggingface.co/second-state/Nomic-embed-text-v1.5-Embedding-GGUF/resolve/main/nomic-embed-text-v1.5-f16.gguf
+
+      - name: Start Qdrant
+        run: |
+          nohup ./qdrant  > ./start-qdrant.log 2>&1 &
+          sleep 5
+          cat start-qdrant.log
+
+      - name: Import the default.snapshot file to Qdrant
+        run: |
+          curl -s -X POST http://localhost:6333/collections/default/snapshots/upload?priority=snapshot -H 'Content-Type:multipart/form-data' -F 'snapshot=@default.snapshot'
+
+      - name: Start rag-api-server for testing chat completions
+        run: |
+          nohup $HOME/.wasmedge/bin/wasmedge --dir .:. --nn-preload default:GGML:AUTO:Qwen2-1.5B-Instruct-Q3_K_M.gguf --nn-preload embedding:GGML:AUTO:nomic-embed-text-v1.5-f16.gguf rag-api-server.wasm --model-name Qwen2-1.5B-Instruct,nomic-embed-text-v1.5 --ctx-size 4096,512 --batch-size 16,512 --prompt-template chatml,embedding --rag-policy last-user-message --socket-addr 0.0.0.0:9069 > ./start-llamaedge.log 2>&1 &
+          sleep 30
+          cat start-llamaedge.log
+
+      - name: Run test_chat.hurl
+        run: |
+          hurl --test --jobs 1 ./tests/test_chat.hurl
+
+      - name: Run test_embeddings.hurl
+        run: |
+          hurl --test --jobs 1 ./tests/test_embeddings.hurl
+
+      - name: Run test_rag.hurl
+        run: |
+          hurl --test --jobs 1 ./tests/test_rag.hurl
+
+      - name: Stop rag-api-server for testing chat completions
+        run: |
+          pkill -f wasmedge
+
+      - name: Stop Qdrant
+        run: |
+          pkill -f qdrant
+
