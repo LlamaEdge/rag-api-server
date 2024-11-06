@@ -88,6 +88,16 @@ jobs:
           curl -LO https://huggingface.co/second-state/Qwen2-1.5B-Instruct-GGUF/resolve/main/Qwen2-1.5B-Instruct-Q3_K_M.gguf
           curl -LO https://huggingface.co/second-state/Nomic-embed-text-v1.5-Embedding-GGUF/resolve/main/nomic-embed-text-v1.5-f16.gguf
 
+      - name: Start Qdrant
+        run: |
+          nohup ./qdrant  > ./start-qdrant.log 2>&1 &
+          sleep 5
+          cat start-qdrant.log
+
+      - name: Import the default.snapshot file to Qdrant
+        run: |
+          curl -s -X POST http://localhost:6333/collections/default/snapshots/upload?priority=snapshot -H 'Content-Type:multipart/form-data' -F 'snapshot=@default.snapshot'
+
       - name: Start rag-api-server for testing chat completions
         run: |
           nohup $HOME/.wasmedge/bin/wasmedge --dir .:. --nn-preload default:GGML:AUTO:Qwen2-1.5B-Instruct-Q3_K_M.gguf --nn-preload embedding:GGML:AUTO:nomic-embed-text-v1.5-f16.gguf rag-api-server.wasm --model-name Qwen2-1.5B-Instruct,nomic-embed-text-v1.5 --ctx-size 4096,512 --batch-size 16,512 --prompt-template chatml,embedding --rag-policy last-user-message --socket-addr 0.0.0.0:9069 > ./start-llamaedge.log 2>&1 &
@@ -101,16 +111,6 @@ jobs:
       - name: Run test_embeddings.hurl
         run: |
           hurl --test --jobs 1 ./tests/test_embeddings.hurl
-
-      - name: Start Qdrant
-        run: |
-          nohup ./qdrant  > ./start-qdrant.log 2>&1 &
-          sleep 5
-          cat start-qdrant.log
-
-      - name: Import the default.snapshot file to Qdrant
-        run: |
-          curl -s -X POST http://localhost:6333/collections/default/snapshots/upload?priority=snapshot -H 'Content-Type:multipart/form-data' -F 'snapshot=@default.snapshot'
 
       - name: Run test_rag.hurl
         run: |
