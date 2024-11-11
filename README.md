@@ -7,14 +7,19 @@
 - [LlamaEdge-RAG API Server](#llamaedge-rag-api-server)
   - [Introduction](#introduction)
     - [Endpoints](#endpoints)
-      - [`/v1/models` endpoint](#v1models-endpoint)
-      - [`/v1/chat/completions` endpoint](#v1chatcompletions-endpoint)
-      - [`/v1/files` endpoint](#v1files-endpoint)
-      - [`/v1/chunks` endpoint](#v1chunks-endpoint)
-      - [`/v1/embeddings` endpoint](#v1embeddings-endpoint)
-      - [`/v1/create/rag` endpoint](#v1createrag-endpoint)
-      - [`/v1/info` endpoint](#v1info-endpoint)
-      - [`/v1/retrieve` endpoint](#v1retrieve-endpoint)
+      - [List models](#list-models)
+      - [Chat completions](#chat-completions)
+      - [Upload a file](#upload-a-file)
+      - [List all files](#list-all-files)
+      - [Retrieve information about a specific file](#retrieve-information-about-a-specific-file)
+      - [Retrieve the content of a specific file](#retrieve-the-content-of-a-specific-file)
+      - [Download a specific file](#download-a-specific-file)
+      - [Delete a file](#delete-a-file)
+      - [Compute chunks](#compute-chunks)
+      - [Compute embeddings for chunks](#compute-embeddings-for-chunks)
+      - [Generate embeddings from a file](#generate-embeddings-from-a-file)
+      - [Get server information](#get-server-information)
+      - [Retrieve context](#retrieve-context)
   - [Setup](#setup)
   - [Build](#build)
   - [Execute](#execute)
@@ -29,7 +34,7 @@ LlamaEdge-RAG API server provides a group of OpenAI-compatible web APIs for the 
 
 ### Endpoints
 
-#### `/v1/models` endpoint
+#### List models
 
 `rag-api-server` provides a POST API `/v1/models` to list currently available models.
 
@@ -59,7 +64,7 @@ If the command runs successfully, you should see the similar output as below in 
 
 </details>
 
-#### `/v1/chat/completions` endpoint
+#### Chat completions
 
 Ask a question using OpenAI's JSON message format.
 
@@ -100,11 +105,11 @@ Here is the response.
 
 </details>
 
-#### `/v1/files` endpoint
+#### Upload a file
 
 In RAG applications, uploading files is a necessary step.
 
-<details> <summary> Example </summary>
+<details> <summary> Example: Upload a file </summary>
 
 The following command upload a text file [paris.txt](https://huggingface.co/datasets/gaianet/paris/raw/main/paris.txt) to the API server via the `/v1/files` endpoint:
 
@@ -129,7 +134,122 @@ The `id` and `filename` fields are important for the next step, for example, to 
 
 </details>
 
-#### `/v1/chunks` endpoint
+#### List all files
+
+`GET /v1/files` endpoint is used for listing all files on the server.
+
+<details> <summary> Example: List files </summary>
+
+The following command lists all files on the server via the `/v1/files` endpoint:
+
+```bash
+curl -X GET http://127.0.0.1:8080/v1/files
+```
+
+If the command is successful, you should see the similar output as below in your terminal:
+
+```bash
+{
+    "object": "list",
+    "data": [
+        {
+            "id": "file_33d9188d-5060-4141-8c52-ae148fd15f6a",
+            "bytes": 17039,
+            "created_at": 1718296362,
+            "filename": "test-123.m4a",
+            "object": "file",
+            "purpose": "assistants"
+        },
+        {
+            "id": "file_8c6439da-df59-4b9a-bb5e-dba4b2f23c04",
+            "bytes": 17039,
+            "created_at": 1718294169,
+            "filename": "test-123.m4a",
+            "object": "file",
+            "purpose": "assistants"
+        }
+    ]
+}
+```
+
+</details>
+
+#### Retrieve information about a specific file
+
+`GET /v1/files/{file_id}` endpoint is used for retrieving information about a specific file on the server.
+
+<details> <summary> Example: Retrieve information about a specific file </summary>
+
+The following command retrieves information about a specific file on the server via the `/v1/files/{file_id}` endpoint:
+
+```bash
+curl -X GET http://localhost:10086/v1/files/file_b892bc81-35e9-44a6-8c01-ae915c1d3832
+```
+
+If the command is successful, you should see the similar output as below in your terminal:
+
+```bash
+{
+    "id": "file_b892bc81-35e9-44a6-8c01-ae915c1d3832",
+    "bytes": 2161,
+    "created_at": 1715832065,
+    "filename": "paris.txt",
+    "object": "file",
+    "purpose": "assistants"
+}
+```
+
+#### Retrieve the content of a specific file
+
+`GET /v1/files/{file_id}/content` endpoint is used for retrieving the content of a specific file on the server.
+
+<details> <summary> Example: Retrieve the content of a specific file </summary>
+
+The following command retrieves the content of a specific file on the server via the `/v1/files/{file_id}/content` endpoint:
+
+```bash
+curl -X GET http://localhost:10086/v1/files/file_b892bc81-35e9-44a6-8c01-ae915c1d3832/content
+```
+
+</details>
+
+#### Download a specific file
+
+`GET /v1/files/download/{file_id}` endpoint is used for downloading a specific file on the server.
+
+<details> <summary> Example: Download a specific file </summary>
+
+The following command downloads a specific file on the server via the `/v1/files/download/{file_id}` endpoint:
+
+```bash
+curl -X GET http://localhost:10086/v1/files/download/file_b892bc81-35e9-44a6-8c01-ae915c1d3832
+```
+
+#### Delete a file
+
+`DELETE /v1/files/{file_id}` endpoint is used for deleting a specific file on the server.
+
+<details> <summary> Example: Delete a specific file </summary>
+
+The following command deletes a specific file on the server via the `/v1/files/{file_id}` endpoint:
+
+```bash
+curl -X DELETE http://localhost:10086/v1/files/file_6a6d8046-fd98-410a-b70e-0a0142ec9a39
+```
+
+If the command is successful, you should see the similar output as below in your terminal:
+
+```bash
+{
+    "id": "file_6a6d8046-fd98-410a-b70e-0a0142ec9a39",
+    "object": "file",
+    "deleted": true
+}
+```
+
+</details>
+
+#### Compute chunks
 
 To segment the uploaded file to chunks for computing embeddings, use the `/v1/chunks` API.
 
@@ -159,7 +279,7 @@ The following is an example return with the generated chunks:
 
 </details>
 
-#### `/v1/embeddings` endpoint
+#### Compute embeddings for chunks
 
 To compute embeddings for user query or file chunks, use the `/v1/embeddings` API.
 
@@ -222,7 +342,7 @@ The embeddings returned are like below:
 
 </details>
 
-#### `/v1/create/rag` endpoint
+#### Generate embeddings from a file
 
 `/v1/create/rag` endpoint provides users a one-click way to convert a text or markdown file to embeddings directly. The effect of the endpoint is equivalent to running `/v1/files` + `/v1/chunks` + `/v1/embeddings` sequently. Note that the `--chunk-capacity` CLI option is required for the endpoint. The default value of the option is `100`. You can set it to different values while starting LlamaEdge-RAG API server.
 
@@ -282,7 +402,7 @@ The embeddings returned are like below:
 
 </details>
 
-#### `/v1/info` endpoint
+#### Get server information
 
 `/v1/info` endpoint provides the information of the API server, including the version of the server, the parameters of models, and etc.
 
@@ -342,9 +462,9 @@ If the command runs successfully, you should see the similar output as below in 
 
 </details>
 
-#### `/v1/retrieve` endpoint
+#### Retrieve context
 
-`/v1/retrieve` endpoint sends a query and gets the retrievalresults.
+`/v1/retrieve` endpoint sends a query and gets the retrieval results.
 
 <details> <summary> Example </summary>
 
@@ -389,7 +509,6 @@ If the command runs successfully, you should see the similar output as below in 
 ```
 
 </details>
-
 
 ## Setup
 
