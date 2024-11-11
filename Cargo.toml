@@ -27,6 +27,7 @@ thiserror = "1"
 tokio = { version = "^1.36", features = ["io-util", "fs", "net", "time", "rt", "macros"] }
 url = "^2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "macro-diagnostics"] }
+walkdir = "2.5.0"
 wasi-logger = { version = "0.1.2", features = ["kv"] }
 
 [patch.crates-io]
