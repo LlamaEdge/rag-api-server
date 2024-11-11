@@ -353,8 +353,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.17.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dae501133a50033a8f4faf020a5f9f06d71f65ab8aba1e785d69349107a55fd"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-files#d1376c8ddf1b698de393ebdba00ed8198b0b0ed5"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -611,8 +610,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60b69284db9be5e360da84f032195312a2b179f86e108181498bf94845822ccd"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-files#d1376c8ddf1b698de393ebdba00ed8198b0b0ed5"
 dependencies = [
  "indexmap",
  "serde",
@@ -1424,15 +1422,16 @@ checksum = "643cb0b8d4fcc284004d5fd0d67ccf61dfffadb7f75e1e71bc420f4688a3a704"
 [[package]]
 name = "llama-core"
 version = "0.21.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96873be451b46450f0783c36fadb8f3ed49b84e2a29228f66685ec6077d02c73"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-files#d1376c8ddf1b698de393ebdba00ed8198b0b0ed5"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
  "either",
  "endpoints",
  "futures",
+ "hyper 0.14.28",
  "log 0.4.22",
+ "multipart-2021",
  "once_cell",
  "qdrant_rest_client",
  "regex",
@@ -1443,6 +1442,7 @@ dependencies = [
  "thiserror",
  "tiktoken-rs",
  "uuid",
+ "walkdir",
  "wasi-logger",
  "wasmedge-wasi-nn",
  "wasmedge_stable_diffusion",
@@ -2056,7 +2056,6 @@ dependencies = [
  "tokio",
  "url 2.5.3",
  "uuid",
- "walkdir",
  "wasi-logger",
 ]
 
