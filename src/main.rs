@@ -19,8 +19,8 @@ use hyper::{
 use llama_core::metadata::ggml::GgmlMetadataBuilder;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
-use tokio::net::TcpListener;
+use std::{collections::HashMap, fmt, net::SocketAddr, path::PathBuf};
+use tokio::{net::TcpListener, sync::RwLock};
 use utils::{is_valid_url, LogLevel};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -28,7 +28,7 @@ type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 // global system prompt
 pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
 // server info
-pub(crate) static SERVER_INFO: OnceCell<ServerInfo> = OnceCell::new();
+pub(crate) static SERVER_INFO: OnceCell<RwLock<ServerInfo>> = OnceCell::new();
 
 // default port
 const DEFAULT_PORT: &str = "8080";
@@ -440,7 +440,7 @@ async fn main() -> Result<(), ServerError> {
         extras: HashMap::new(),
     };
     SERVER_INFO
-        .set(server_info)
+        .set(RwLock::new(server_info))
         .map_err(|_| ServerError::Operation("Failed to set `SERVER_INFO`.".to_string()))?;
 
     let new_service = make_service_fn(move |conn: &AddrStream| {
@@ -570,6 +570,15 @@ pub(crate) struct QdrantConfig {
     pub(crate) collection_name: String,
     pub(crate) limit: u64,
     pub(crate) score_threshold: f32,
+}
+impl fmt::Display for QdrantConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "url: {}, collection_name: {}, limit: {}, score_threshold: {}",
+            self.url, self.collection_name, self.limit, self.score_threshold
+        )
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

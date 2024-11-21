@@ -1,13 +1,17 @@
-use crate::{error, utils::gen_chat_id, ServerInfo, GLOBAL_RAG_PROMPT, SERVER_INFO};
+use crate::{error, utils::gen_chat_id, QdrantConfig, GLOBAL_RAG_PROMPT, SERVER_INFO};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
-    embeddings::{EmbeddingRequest, InputText},
+    embeddings::{ChunksRequest, ChunksResponse, EmbeddingRequest, InputText},
     files::{DeleteFileStatus, FileObject},
-    rag::{ChunksRequest, ChunksResponse, RagEmbeddingRequest, RetrieveObject},
+    rag::RetrieveObject,
 };
 use futures_util::TryStreamExt;
 use hyper::{body::to_bytes, Body, Method, Request, Response};
+use llama_core::{
+    embeddings::{chunk_text, embeddings},
+    rag::{rag_doc_chunks_to_embeddings, rag_query_to_embeddings, rag_retrieve_context},
+};
 use multipart::server::{Multipart, ReadEntry, ReadEntryResult};
 use multipart_2021 as multipart;
 use std::{
@@ -134,7 +138,7 @@ pub(crate) async fn embeddings_handler(mut req: Request<Body>) -> Response<Body>
     // log user id
     info!(target: "stdout", "user: {}", &id);
 
-    let res = match llama_core::embeddings::embeddings(&embedding_request).await {
+    let res = match embeddings(&embedding_request).await {
         Ok(embedding_response) => {
             // serialize embedding object
             match serde_json::to_string(&embedding_response) {
@@ -254,12 +258,53 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     // log user id
     info!(target: "stdout", "user: {}", &id);
 
-    let server_info = match SERVER_INFO.get() {
-        Some(server_info) => server_info,
-        None => {
-            let err_msg = "The server info is not set.";
+    // qdrant config
+    let qdrant_config = match (
+        chat_request.qdrant_url.as_ref(),
+        chat_request.qdrant_collection_name.as_ref(),
+    ) {
+        (Some(url), Some(collection_name)) => {
+            info!(target: "stdout", "qdrant url: {}, collection name: {}", url, collection_name);
 
-            // log
+            let limit = match chat_request.limit {
+                Some(limit) => limit,
+                None => SERVER_INFO.get().unwrap().read().await.qdrant_config.limit,
+            };
+
+            let score_threshold = match chat_request.score_threshold {
+                Some(score_threshold) => score_threshold,
+                None => {
+                    SERVER_INFO
+                        .get()
+                        .unwrap()
+                        .read()
+                        .await
+                        .qdrant_config
+                        .score_threshold
+                }
+            };
+
+            QdrantConfig {
+                url: url.clone(),
+                collection_name: collection_name.clone(),
+                limit,
+                score_threshold,
+            }
+        }
+        (None, None) => {
+            info!(target: "stdout", "qdrant url and collection name are not set.");
+
+            SERVER_INFO
+                .get()
+                .unwrap()
+                .read()
+                .await
+                .qdrant_config
+                .clone()
+        }
+        _ => {
+            let err_msg = "The qdrant url or collection name is not set.";
+
             error!(target: "stdout", "{}", &err_msg);
 
             return error::internal_server_error(err_msg);
@@ -267,7 +312,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     };
 
     // * perform retrieval
-    let retrieve_object = match retrieve_context(&mut chat_request, server_info).await {
+    let retrieve_object = match retrieve_context(&mut chat_request, &qdrant_config).await {
         Ok(retrieve_object) => retrieve_object,
         Err(response) => {
             return response;
@@ -280,7 +325,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
             match scored_points.is_empty() {
                 true => {
                     // log
-                    warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold));
+                    warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", qdrant_config.score_threshold));
                 }
                 false => {
                     // update messages with retrieved context
@@ -316,12 +361,24 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
                         }
                     };
 
+                    let rag_policy = match SERVER_INFO.get() {
+                        Some(server_info) => server_info.read().await.rag_config.policy,
+                        None => {
+                            let err_msg = "SERVER_INFO is not initialized.";
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    };
+
                     // insert rag context into chat request
                     if let Err(e) = RagPromptBuilder::build(
                         &mut chat_request.messages,
                         &[context],
                         prompt_template.has_system_prompt(),
-                        server_info.rag_config.policy,
+                        rag_policy,
                     ) {
                         let err_msg = e.to_string();
 
@@ -335,7 +392,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         }
         None => {
             // log
-            warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", server_info.qdrant_config.score_threshold
+            warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", qdrant_config.score_threshold
             ));
         }
     }
@@ -434,12 +491,14 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
 
 async fn retrieve_context(
     chat_request: &mut ChatCompletionRequest,
-    server_info: &ServerInfo,
+    qdrant_config: &QdrantConfig,
 ) -> Result<RetrieveObject, Response<Body>> {
     info!(target: "stdout", "Compute embeddings for user query.");
 
     let context_window = chat_request.context_window.unwrap() as usize;
     info!(target: "stdout", "context window: {}", context_window);
+
+    info!(target: "stdout", "VectorDB config: {}", qdrant_config);
 
     // compute embeddings for user query
     let embedding_response = match chat_request.messages.is_empty() {
@@ -519,16 +578,12 @@ async fn retrieve_context(
                 input: InputText::String(query_text),
                 encoding_format: None,
                 user: chat_request.user.clone(),
-            };
-
-            let rag_embedding_request = RagEmbeddingRequest {
-                embedding_request,
-                qdrant_url: server_info.qdrant_config.url.clone(),
-                qdrant_collection_name: server_info.qdrant_config.collection_name.clone(),
+                qdrant_url: Some(qdrant_config.url.clone()),
+                qdrant_collection_name: Some(qdrant_config.collection_name.clone()),
             };
 
             // compute embeddings for query
-            match llama_core::rag::rag_query_to_embeddings(&rag_embedding_request).await {
+            match rag_query_to_embeddings(&embedding_request).await {
                 Ok(embedding_response) => embedding_response,
                 Err(e) => {
                     let err_msg = e.to_string();
@@ -554,12 +609,12 @@ async fn retrieve_context(
     };
 
     // perform the context retrieval
-    let mut retrieve_object: RetrieveObject = match llama_core::rag::rag_retrieve_context(
+    let mut retrieve_object: RetrieveObject = match rag_retrieve_context(
         query_embedding.as_slice(),
-        server_info.qdrant_config.url.to_string().as_str(),
-        server_info.qdrant_config.collection_name.as_str(),
-        server_info.qdrant_config.limit as usize,
-        Some(server_info.qdrant_config.score_threshold),
+        qdrant_config.url.to_string().as_str(),
+        qdrant_config.collection_name.as_str(),
+        qdrant_config.limit as usize,
+        Some(qdrant_config.score_threshold),
     )
     .await
     {
@@ -1389,8 +1444,7 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
         return error::internal_server_error(err_msg);
     }
 
-    let res = match llama_core::rag::chunk_text(&contents, extension, chunks_request.chunk_capacity)
-    {
+    let res = match chunk_text(&contents, extension, chunks_request.chunk_capacity) {
         Ok(chunks) => {
             let chunks_response = ChunksResponse {
                 id: chunks_request.id,
@@ -1445,12 +1499,24 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
     res
 }
 
-pub(crate) async fn doc_to_embeddings_handler(
+pub(crate) async fn create_rag_handler(
     req: Request<Body>,
     chunk_capacity: usize,
 ) -> Response<Body> {
     // log
     info!(target: "stdout", "Handling the coming doc_to_embeddings request.");
+
+    let mut qdrant_config = match SERVER_INFO.get() {
+        Some(server_info) => server_info.read().await.qdrant_config.clone(),
+        None => {
+            let err_msg = "The server info is not set.";
+
+            // log
+            error!(target: "stdout", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
+    };
 
     // upload the target rag document
     let file_object = if req.method() == Method::POST {
@@ -1481,96 +1547,154 @@ pub(crate) async fn doc_to_embeddings_handler(
 
         let mut file_object: Option<FileObject> = None;
         while let ReadEntryResult::Entry(mut field) = multipart.read_entry_mut() {
-            if &*field.headers.name == "file" {
-                let filename = match field.headers.filename {
-                    Some(filename) => filename,
-                    None => {
-                        let err_msg =
-                            "Failed to upload the target file. The filename is not provided.";
+            match &*field.headers.name {
+                "file" => {
+                    let filename = match field.headers.filename {
+                        Some(filename) => filename,
+                        None => {
+                            let err_msg =
+                                "Failed to upload the target file. The filename is not provided.";
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    };
+
+                    if !((filename).to_lowercase().ends_with(".txt")
+                        || (filename).to_lowercase().ends_with(".md"))
+                    {
+                        let err_msg = "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported.";
 
                         // log
                         error!(target: "stdout", "{}", &err_msg);
 
                         return error::internal_server_error(err_msg);
                     }
-                };
 
-                if !((filename).to_lowercase().ends_with(".txt")
-                    || (filename).to_lowercase().ends_with(".md"))
-                {
-                    let err_msg = "Failed to upload the target file. Only files with 'txt' and 'md' extensions are supported.";
+                    let mut buffer = Vec::new();
+                    let size_in_bytes = match field.data.read_to_end(&mut buffer) {
+                        Ok(size_in_bytes) => size_in_bytes,
+                        Err(e) => {
+                            let err_msg = format!("Failed to read the target file. {}", e);
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    };
+
+                    // create a unique file id
+                    let id = format!("file_{}", uuid::Uuid::new_v4());
+
+                    // save the file
+                    let path = Path::new("archives");
+                    if !path.exists() {
+                        fs::create_dir(path).unwrap();
+                    }
+                    let file_path = path.join(&id);
+                    if !file_path.exists() {
+                        fs::create_dir(&file_path).unwrap();
+                    }
+                    let mut file = match File::create(file_path.join(&filename)) {
+                        Ok(file) => file,
+                        Err(e) => {
+                            let err_msg =
+                                format!("Failed to create archive document {}. {}", &filename, e);
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    };
+                    file.write_all(&buffer[..]).unwrap();
+
+                    // log
+                    info!(target: "stdout", "file_id: {}, file_name: {}", &id, &filename);
+
+                    let created_at = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                        Ok(n) => n.as_secs(),
+                        Err(_) => {
+                            let err_msg = "Failed to get the current time.";
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    };
+
+                    // create a file object
+                    file_object = Some(FileObject {
+                        id,
+                        bytes: size_in_bytes as u64,
+                        created_at,
+                        filename,
+                        object: "file".to_string(),
+                        purpose: "assistants".to_string(),
+                    });
+                }
+                "url_vdb_server" => match field.is_text() {
+                    true => {
+                        let mut qdrant_url: String = String::new();
+
+                        if let Err(e) = field.data.read_to_string(&mut qdrant_url) {
+                            let err_msg = format!("Failed to read the url_vdb_server field. {}", e);
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+
+                        qdrant_config.url = qdrant_url;
+                    }
+                    false => {
+                        let err_msg =
+                        "Failed to get `url_vdb_server`. The `url_vdb_server` field in the request should be a text field.";
+
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                },
+                "collection_name" => match field.is_text() {
+                    true => {
+                        let mut qdrant_collection_name: String = String::new();
+
+                        if let Err(e) = field.data.read_to_string(&mut qdrant_collection_name) {
+                            let err_msg =
+                                format!("Failed to read the collection_name field. {}", e);
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+
+                        qdrant_config.collection_name = qdrant_collection_name;
+                    }
+                    false => {
+                        let err_msg = "Failed to get `collection_name`. The `collection_name` field in the request should be a text field.";
+
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                },
+                _ => {
+                    let err_msg = format!("Invalid field name: {}", &field.headers.name);
 
                     // log
                     error!(target: "stdout", "{}", &err_msg);
 
                     return error::internal_server_error(err_msg);
                 }
-
-                let mut buffer = Vec::new();
-                let size_in_bytes = match field.data.read_to_end(&mut buffer) {
-                    Ok(size_in_bytes) => size_in_bytes,
-                    Err(e) => {
-                        let err_msg = format!("Failed to read the target file. {}", e);
-
-                        // log
-                        error!(target: "stdout", "{}", &err_msg);
-
-                        return error::internal_server_error(err_msg);
-                    }
-                };
-
-                // create a unique file id
-                let id = format!("file_{}", uuid::Uuid::new_v4());
-
-                // save the file
-                let path = Path::new("archives");
-                if !path.exists() {
-                    fs::create_dir(path).unwrap();
-                }
-                let file_path = path.join(&id);
-                if !file_path.exists() {
-                    fs::create_dir(&file_path).unwrap();
-                }
-                let mut file = match File::create(file_path.join(&filename)) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        let err_msg =
-                            format!("Failed to create archive document {}. {}", &filename, e);
-
-                        // log
-                        error!(target: "stdout", "{}", &err_msg);
-
-                        return error::internal_server_error(err_msg);
-                    }
-                };
-                file.write_all(&buffer[..]).unwrap();
-
-                // log
-                info!(target: "stdout", "file_id: {}, file_name: {}", &id, &filename);
-
-                let created_at = match SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-                    Ok(n) => n.as_secs(),
-                    Err(_) => {
-                        let err_msg = "Failed to get the current time.";
-
-                        // log
-                        error!(target: "stdout", "{}", &err_msg);
-
-                        return error::internal_server_error(err_msg);
-                    }
-                };
-
-                // create a file object
-                file_object = Some(FileObject {
-                    id,
-                    bytes: size_in_bytes as u64,
-                    created_at,
-                    filename,
-                    object: "file".to_string(),
-                    purpose: "assistants".to_string(),
-                });
-
-                break;
             }
         }
 
@@ -1704,7 +1828,7 @@ pub(crate) async fn doc_to_embeddings_handler(
 
         info!(target: "stdout", "Chunk the file contents.");
 
-        match llama_core::rag::chunk_text(&contents, extension, chunk_capacity) {
+        match chunk_text(&contents, extension, chunk_capacity) {
             Ok(chunks) => chunks,
             Err(e) => {
                 let err_msg = e.to_string();
@@ -1734,34 +1858,19 @@ pub(crate) async fn doc_to_embeddings_handler(
 
         info!(target: "stdout", "Prepare the rag embedding request.");
 
+        info!(target: "stdout", "VectorDB config: {}", qdrant_config);
+
         // create an embedding request
         let embedding_request = EmbeddingRequest {
             model,
             input: chunks.into(),
             encoding_format: None,
             user: None,
+            qdrant_url: Some(qdrant_config.url),
+            qdrant_collection_name: Some(qdrant_config.collection_name),
         };
 
-        let server_info = match SERVER_INFO.get() {
-            Some(server_info) => server_info,
-            None => {
-                let err_msg = "The server info is not set.";
-
-                // log
-                error!(target: "stdout", "{}", &err_msg);
-
-                return error::internal_server_error(err_msg);
-            }
-        };
-
-        // create rag embedding request
-        let rag_embedding_request = RagEmbeddingRequest::from_embedding_request(
-            embedding_request,
-            server_info.qdrant_config.url.clone(),
-            server_info.qdrant_config.collection_name.clone(),
-        );
-
-        match llama_core::rag::rag_doc_chunks_to_embeddings(&rag_embedding_request).await {
+        match rag_doc_chunks_to_embeddings(&embedding_request).await {
             Ok(embedding_response) => embedding_response,
             Err(e) => {
                 let err_msg = e.to_string();
@@ -1817,7 +1926,7 @@ pub(crate) async fn server_info_handler() -> Response<Body> {
 
     // get the server info
     let server_info = match SERVER_INFO.get() {
-        Some(server_info) => server_info,
+        Some(server_info) => server_info.read().await,
         None => {
             let err_msg = "The server info is not set.";
 
@@ -1829,7 +1938,7 @@ pub(crate) async fn server_info_handler() -> Response<Body> {
     };
 
     // serialize server info
-    let s = match serde_json::to_string(&server_info) {
+    let s = match serde_json::to_string(&*server_info) {
         Ok(s) => s,
         Err(e) => {
             let err_msg = format!("Fail to serialize server info. {}", e);
@@ -1928,19 +2037,60 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     // log user id
     info!(target: "stdout", "user: {}", &id);
 
-    let server_info = match SERVER_INFO.get() {
-        Some(server_info) => server_info,
-        None => {
-            let err_msg = "The server info is not set.";
+    // qdrant config
+    let qdrant_config = match (
+        chat_request.qdrant_url.as_ref(),
+        chat_request.qdrant_collection_name.as_ref(),
+    ) {
+        (Some(url), Some(collection_name)) => {
+            info!(target: "stdout", "qdrant url: {}, collection name: {}", url, collection_name);
 
-            // log
+            let limit = match chat_request.limit {
+                Some(limit) => limit,
+                None => SERVER_INFO.get().unwrap().read().await.qdrant_config.limit,
+            };
+
+            let score_threshold = match chat_request.score_threshold {
+                Some(score_threshold) => score_threshold,
+                None => {
+                    SERVER_INFO
+                        .get()
+                        .unwrap()
+                        .read()
+                        .await
+                        .qdrant_config
+                        .score_threshold
+                }
+            };
+
+            QdrantConfig {
+                url: url.clone(),
+                collection_name: collection_name.clone(),
+                limit,
+                score_threshold,
+            }
+        }
+        (None, None) => {
+            info!(target: "stdout", "qdrant url and collection name are not set.");
+
+            SERVER_INFO
+                .get()
+                .unwrap()
+                .read()
+                .await
+                .qdrant_config
+                .clone()
+        }
+        _ => {
+            let err_msg = "The qdrant url or collection name is not set.";
+
             error!(target: "stdout", "{}", &err_msg);
 
             return error::internal_server_error(err_msg);
         }
     };
 
-    let retrieve_object = match retrieve_context(&mut chat_request, server_info).await {
+    let retrieve_object = match retrieve_context(&mut chat_request, &qdrant_config).await {
         Ok(retrieve_object) => retrieve_object,
         Err(response) => {
             return response;
