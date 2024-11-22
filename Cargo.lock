@@ -353,7 +353,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.17.4"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-override-vdb#34be7d4fee3c0d4ec28b00eff88931aeb8e5fc44"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#34be7d4fee3c0d4ec28b00eff88931aeb8e5fc44"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -610,7 +610,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.17.2"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-override-vdb#34be7d4fee3c0d4ec28b00eff88931aeb8e5fc44"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#34be7d4fee3c0d4ec28b00eff88931aeb8e5fc44"
 dependencies = [
  "indexmap",
  "serde",
@@ -1422,7 +1422,7 @@ checksum = "643cb0b8d4fcc284004d5fd0d67ccf61dfffadb7f75e1e71bc420f4688a3a704"
 [[package]]
 name = "llama-core"
 version = "0.22.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-override-vdb#34be7d4fee3c0d4ec28b00eff88931aeb8e5fc44"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#34be7d4fee3c0d4ec28b00eff88931aeb8e5fc44"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
