@@ -574,7 +574,7 @@ async fn retrieve_context(
 
             // create a embedding request
             let embedding_request = EmbeddingRequest {
-                model: embedding_model_names[0].clone(),
+                model: Some(embedding_model_names[0].clone()),
                 input: InputText::String(query_text),
                 encoding_format: None,
                 user: chat_request.user.clone(),
@@ -1862,7 +1862,7 @@ pub(crate) async fn create_rag_handler(
 
         // create an embedding request
         let embedding_request = EmbeddingRequest {
-            model,
+            model: Some(model),
             input: chunks.into(),
             encoding_format: None,
             user: None,
