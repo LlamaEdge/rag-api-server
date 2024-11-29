@@ -36,6 +36,7 @@ jobs:
     strategy:
       matrix:
         wasmedge_version: [0.14.1]
+        ggml_version: [b3651]
     steps:
       - name: Clone project
         id: checkout
@@ -55,7 +56,7 @@ jobs:
 
       - name: Install WasmEdge
         run: |
-          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }}
+          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }} --ggmlbn=${{ matrix.ggml_version }}
           ls -al $HOME/.wasmedge/bin
 
       - name: Install Hurl
@@ -130,6 +131,7 @@ jobs:
     strategy:
       matrix:
         wasmedge_version: [0.14.1]
+        ggml_version: [b3651]
     steps:
       - name: Clone project
         id: checkout
@@ -155,7 +157,7 @@ jobs:
 
       - name: Install WasmEdge
         run: |
-          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }}
+          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }} --ggmlbn=${{ matrix.ggml_version }}
           ls -al $HOME/.wasmedge/bin
 
       - name: Install Hurl
@@ -231,6 +233,7 @@ jobs:
     strategy:
       matrix:
         wasmedge_version: [0.14.1]
+        ggml_version: [b3651]
     steps:
       - name: Clone project
         id: checkout
@@ -256,7 +259,7 @@ jobs:
 
       - name: Install WasmEdge
         run: |
-          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }}
+          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }} --ggmlbn=${{ matrix.ggml_version }}
           ls -al $HOME/.wasmedge/bin
 
       - name: Install Hurl
@@ -332,6 +335,7 @@ jobs:
     strategy:
       matrix:
         wasmedge_version: [0.14.1]
+        ggml_version: [b3651]
     steps:
       - name: Clone project
         id: checkout
@@ -357,7 +361,7 @@ jobs:
 
       - name: Install WasmEdge
         run: |
-          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }}
+          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install_v2.sh | bash -s -- -v ${{ matrix.wasmedge_version }} --ggmlbn=${{ matrix.ggml_version }}
           ls -al $HOME/.wasmedge/bin
 
       - name: Install Hurl
