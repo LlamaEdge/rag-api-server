@@ -5,15 +5,15 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-chat-prompts = { version = "=0.17.5" }
+chat-prompts = { version = "=0.18.0" }
 chrono = "0.4.38"
 clap = { version = "4.4.6", features = ["cargo"] }
 either = "1.12.0"
-endpoints = { version = "=0.18.0", features = ["rag"] }
+endpoints = { version = "=0.19.0", features = ["rag"] }
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
 futures-util = "0.3"
 hyper = { version = "0.14", features = ["full"] }
-llama-core = { version = "=0.23.0", features = ["logging", "rag"] }
+llama-core = { version = "=0.23.3", features = ["logging", "rag"] }
 log = { version = "0.4.21", features = ["std", "kv", "kv_serde"] }
 mime_guess = "2.0.4"
 multipart-2021 = "0.19.0"
