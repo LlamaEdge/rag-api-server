@@ -266,15 +266,17 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     };
 
     // retrieve context
-    let retrieve_object_vec =
-        match retrieve_context_with_multiple_qdrant_configs(&mut chat_request, &qdrant_config_vec)
-            .await
-        {
-            Ok(retrieve_object_vec) => retrieve_object_vec,
-            Err(response) => {
-                return response;
-            }
-        };
+    let retrieve_object_vec = match retrieve_context_with_multiple_qdrant_configs(
+        &chat_request,
+        &qdrant_config_vec,
+    )
+    .await
+    {
+        Ok(retrieve_object_vec) => retrieve_object_vec,
+        Err(response) => {
+            return response;
+        }
+    };
 
     // log retrieve object
     debug!(target: "stdout", "retrieve_object_vec:\n{}", serde_json::to_string_pretty(&retrieve_object_vec).unwrap());
@@ -2060,15 +2062,17 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     };
 
     // retrieve context
-    let retrieve_object_vec =
-        match retrieve_context_with_multiple_qdrant_configs(&mut chat_request, &qdrant_config_vec)
-            .await
-        {
-            Ok(retrieve_object_vec) => retrieve_object_vec,
-            Err(response) => {
-                return response;
-            }
-        };
+    let retrieve_object_vec = match retrieve_context_with_multiple_qdrant_configs(
+        &chat_request,
+        &qdrant_config_vec,
+    )
+    .await
+    {
+        Ok(retrieve_object_vec) => retrieve_object_vec,
+        Err(response) => {
+            return response;
+        }
+    };
 
     // log retrieve object
     debug!(target: "stdout", "retrieve_object_vec:\n{}", serde_json::to_string_pretty(&retrieve_object_vec).unwrap());
