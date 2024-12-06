@@ -102,14 +102,14 @@ struct Cli {
     #[arg(long, default_value = "http://127.0.0.1:6333")]
     qdrant_url: String,
     /// Name of Qdrant collection
-    #[arg(long, default_value = "default")]
-    qdrant_collection_name: String,
+    #[arg(long, default_value = "default", value_delimiter = ',')]
+    qdrant_collection_name: Vec<String>,
     /// Max number of retrieved result (no less than 1)
-    #[arg(long, default_value = "5", value_parser = clap::value_parser!(u64))]
-    qdrant_limit: u64,
+    #[arg(long, default_value = "5", value_delimiter = ',', value_parser = clap::value_parser!(u64))]
+    qdrant_limit: Vec<u64>,
     /// Minimal score threshold for the search result
-    #[arg(long, default_value = "0.4", value_parser = clap::value_parser!(f32))]
-    qdrant_score_threshold: f32,
+    #[arg(long, default_value = "0.4", value_delimiter = ',', value_parser = clap::value_parser!(f32))]
+    qdrant_score_threshold: Vec<f32>,
     /// Maximum number of tokens each chunk contains
     #[arg(long, default_value = "100", value_parser = clap::value_parser!(usize))]
     chunk_capacity: usize,
@@ -147,10 +147,11 @@ async fn main() -> Result<(), ServerError> {
     if log_level == LogLevel::Debug || log_level == LogLevel::Trace {
         plugin_debug = true;
     }
-
     // set global logger
     wasi_logger::Logger::install().expect("failed to install wasi_logger::Logger");
     log::set_max_level(log_level.into());
+
+    info!(target: "stdout", "log_level: {}", log_level);
 
     // parse the command line arguments
     let cli = Cli::parse();
@@ -275,22 +276,75 @@ async fn main() -> Result<(), ServerError> {
     }
     info!(target: "stdout", "qdrant_url: {}", &cli.qdrant_url);
 
+    if cli.qdrant_collection_name.len() != cli.qdrant_limit.len()
+        && cli.qdrant_limit.len() > 1
+        && cli.qdrant_score_threshold.len() > 1
+    {
+        return Err(ServerError::ArgumentError(
+            "LlamaEdge RAG API server requires the same number of Qdrant collection names and limits; or the limit is only one value for all collections.".to_owned(),
+        ));
+    }
+
+    if cli.qdrant_collection_name.len() != cli.qdrant_score_threshold.len()
+        && cli.qdrant_score_threshold.len() > 1
+        && cli.qdrant_score_threshold.len() > 1
+    {
+        return Err(ServerError::ArgumentError(
+            "LlamaEdge RAG API server requires the same number of Qdrant collection names and score thresholds; or the score threshold is only one value for all collections.".to_owned(),
+        ));
+    }
+
     // log qdrant collection name
-    info!(target: "stdout", "qdrant_collection_name: {}", &cli.qdrant_collection_name);
+    let qdrant_collection_name_str: String = cli
+        .qdrant_collection_name
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    info!(target: "stdout", "qdrant_collection_name: {}", qdrant_collection_name_str);
 
     // log qdrant limit
-    info!(target: "stdout", "qdrant_limit: {}", &cli.qdrant_limit);
+    let qdrant_limit_str: String = cli
+        .qdrant_limit
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    info!(target: "stdout", "qdrant_limit: {}", qdrant_limit_str);
 
     // log qdrant score threshold
-    info!(target: "stdout", "qdrant_score_threshold: {}", &cli.qdrant_score_threshold);
+    let qdrant_score_threshold_str: String = cli
+        .qdrant_score_threshold
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    info!(target: "stdout", "qdrant_score_threshold: {}", qdrant_score_threshold_str);
 
     // create qdrant config
-    let qdrant_config = QdrantConfig {
-        url: cli.qdrant_url,
-        collection_name: cli.qdrant_collection_name,
-        limit: cli.qdrant_limit,
-        score_threshold: cli.qdrant_score_threshold,
-    };
+    let mut qdrant_config_vec: Vec<QdrantConfig> = Vec::new();
+    for (idx, col_name) in cli.qdrant_collection_name.iter().enumerate() {
+        let limit = if cli.qdrant_limit.len() == 1 {
+            cli.qdrant_limit[0]
+        } else {
+            cli.qdrant_limit[idx]
+        };
+
+        let score_threshold = if cli.qdrant_score_threshold.len() == 1 {
+            cli.qdrant_score_threshold[0]
+        } else {
+            cli.qdrant_score_threshold[idx]
+        };
+
+        let qdrant_config = QdrantConfig {
+            url: cli.qdrant_url.clone(),
+            collection_name: col_name.clone(),
+            limit,
+            score_threshold,
+        };
+
+        qdrant_config_vec.push(qdrant_config);
+    }
 
     // log chunk capacity
     info!(target: "stdout", "chunk_capacity: {}", &cli.chunk_capacity);
@@ -415,9 +469,6 @@ async fn main() -> Result<(), ServerError> {
     };
     let port = addr.port().to_string();
 
-    // log socket address
-    info!(target: "stdout", "socket_address: {}", addr.to_string());
-
     // get the environment variable `NODE_VERSION`
     // Note that this is for satisfying the requirement of `gaianet-node` project.
     let node = std::env::var("NODE_VERSION").ok();
@@ -436,7 +487,7 @@ async fn main() -> Result<(), ServerError> {
             port,
         },
         rag_config,
-        qdrant_config,
+        qdrant_config: qdrant_config_vec,
         extras: HashMap::new(),
     };
     SERVER_INFO
@@ -611,7 +662,7 @@ pub(crate) struct ServerInfo {
     server: ApiServer,
     #[serde(flatten)]
     rag_config: RagConfig,
-    qdrant_config: QdrantConfig,
+    qdrant_config: Vec<QdrantConfig>,
     extras: HashMap<String, String>,
 }
 
