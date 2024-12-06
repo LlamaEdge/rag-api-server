@@ -15,6 +15,7 @@ use llama_core::{
 use multipart::server::{Multipart, ReadEntry, ReadEntryResult};
 use multipart_2021 as multipart;
 use std::{
+    collections::HashSet,
     fs::{self, File},
     io::{Cursor, Read, Write},
     path::Path,
@@ -259,141 +260,102 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     info!(target: "stdout", "user: {}", &id);
 
     // qdrant config
-    let qdrant_config = match (
-        chat_request.qdrant_url.as_ref(),
-        chat_request.qdrant_collection_name.as_ref(),
-    ) {
-        (Some(url), Some(collection_name)) => {
-            info!(target: "stdout", "qdrant url: {}, collection name: {}", url, collection_name);
+    let qdrant_config_vec = match get_qdrant_configs(&chat_request).await {
+        Ok(qdrant_config_vec) => qdrant_config_vec,
+        Err(e) => return error::internal_server_error(e.to_string()),
+    };
 
-            let limit = match chat_request.limit {
-                Some(limit) => limit,
-                None => SERVER_INFO.get().unwrap().read().await.qdrant_config.limit,
-            };
+    // retrieve context
+    let retrieve_object_vec =
+        match retrieve_context_with_multiple_qdrant_configs(&mut chat_request, &qdrant_config_vec)
+            .await
+        {
+            Ok(retrieve_object_vec) => retrieve_object_vec,
+            Err(response) => {
+                return response;
+            }
+        };
 
-            let score_threshold = match chat_request.score_threshold {
-                Some(score_threshold) => score_threshold,
-                None => {
-                    SERVER_INFO
-                        .get()
-                        .unwrap()
-                        .read()
-                        .await
-                        .qdrant_config
-                        .score_threshold
+    // log retrieve object
+    debug!(target: "stdout", "retrieve_object_vec:\n{}", serde_json::to_string_pretty(&retrieve_object_vec).unwrap());
+
+    // * extract the context from retrieved objects
+    let mut context = String::new();
+    for (idx, retrieve_object) in retrieve_object_vec.iter().enumerate() {
+        match retrieve_object.points.as_ref() {
+            Some(scored_points) => {
+                match scored_points.is_empty() {
+                    false => {
+                        for (idx, point) in scored_points.iter().enumerate() {
+                            // log
+                            info!(target: "stdout", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
+
+                            context.push_str(&point.source);
+                            context.push_str("\n\n");
+                        }
+                    }
+                    true => {
+                        // log
+                        warn!(target: "stdout", "{}", format!("No point retrieved from the collection `{}` (score < threshold {})", qdrant_config_vec[idx].collection_name, qdrant_config_vec[idx].score_threshold));
+                    }
                 }
-            };
-
-            QdrantConfig {
-                url: url.clone(),
-                collection_name: collection_name.clone(),
-                limit,
-                score_threshold,
+            }
+            None => {
+                // log
+                warn!(target: "stdout", "{}", format!("No point retrieved from the collection `{}` (score < threshold {})", qdrant_config_vec[idx].collection_name, qdrant_config_vec[idx].score_threshold));
             }
         }
-        (None, None) => {
-            info!(target: "stdout", "qdrant url and collection name are not set.");
+    }
 
-            SERVER_INFO
-                .get()
-                .unwrap()
-                .read()
-                .await
-                .qdrant_config
-                .clone()
-        }
-        _ => {
-            let err_msg = "The qdrant url or collection name is not set.";
+    // * update messages with retrieved context
+    if !context.is_empty() {
+        if chat_request.messages.is_empty() {
+            let err_msg = "No message in the chat request.";
 
+            // log
             error!(target: "stdout", "{}", &err_msg);
 
             return error::internal_server_error(err_msg);
         }
-    };
 
-    // * perform retrieval
-    let retrieve_object = match retrieve_context(&mut chat_request, &qdrant_config).await {
-        Ok(retrieve_object) => retrieve_object,
-        Err(response) => {
-            return response;
-        }
-    };
+        let prompt_template =
+            match llama_core::utils::chat_prompt_template(chat_request.model.as_deref()) {
+                Ok(prompt_template) => prompt_template,
+                Err(e) => {
+                    let err_msg = e.to_string();
 
-    // * update messages with retrieved context
-    match retrieve_object.points {
-        Some(scored_points) => {
-            match scored_points.is_empty() {
-                true => {
                     // log
-                    warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", qdrant_config.score_threshold));
+                    error!(target: "stdout", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
                 }
-                false => {
-                    // update messages with retrieved context
-                    let mut context = String::new();
-                    for (idx, point) in scored_points.iter().enumerate() {
-                        // log
-                        info!(target: "stdout", "point: {}, score: {}, source: {}", idx, point.score, &point.source);
+            };
 
-                        context.push_str(&point.source);
-                        context.push_str("\n\n");
-                    }
+        let rag_policy = match SERVER_INFO.get() {
+            Some(server_info) => server_info.read().await.rag_config.policy,
+            None => {
+                let err_msg = "SERVER_INFO is not initialized.";
 
-                    if chat_request.messages.is_empty() {
-                        let err_msg = "No message in the chat request.";
+                // log
+                error!(target: "stdout", "{}", &err_msg);
 
-                        // log
-                        error!(target: "stdout", "{}", &err_msg);
-
-                        return error::internal_server_error(err_msg);
-                    }
-
-                    let prompt_template = match llama_core::utils::chat_prompt_template(
-                        chat_request.model.as_deref(),
-                    ) {
-                        Ok(prompt_template) => prompt_template,
-                        Err(e) => {
-                            let err_msg = e.to_string();
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::internal_server_error(err_msg);
-                        }
-                    };
-
-                    let rag_policy = match SERVER_INFO.get() {
-                        Some(server_info) => server_info.read().await.rag_config.policy,
-                        None => {
-                            let err_msg = "SERVER_INFO is not initialized.";
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return error::internal_server_error(err_msg);
-                        }
-                    };
-
-                    // insert rag context into chat request
-                    if let Err(e) = RagPromptBuilder::build(
-                        &mut chat_request.messages,
-                        &[context],
-                        prompt_template.has_system_prompt(),
-                        rag_policy,
-                    ) {
-                        let err_msg = e.to_string();
-
-                        // log
-                        error!(target: "stdout", "{}", &err_msg);
-
-                        return error::internal_server_error(err_msg);
-                    }
-                }
+                return error::internal_server_error(err_msg);
             }
-        }
-        None => {
+        };
+
+        // insert rag context into chat request
+        if let Err(e) = RagPromptBuilder::build(
+            &mut chat_request.messages,
+            &[context],
+            prompt_template.has_system_prompt(),
+            rag_policy,
+        ) {
+            let err_msg = e.to_string();
+
             // log
-            warn!(target: "stdout", "{}", format!("No point retrieved (score < threshold {})", qdrant_config.score_threshold
-            ));
+            error!(target: "stdout", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
         }
     }
 
@@ -489,8 +451,8 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     res
 }
 
-async fn retrieve_context(
-    chat_request: &mut ChatCompletionRequest,
+async fn retrieve_context_with_single_qdrant_config(
+    chat_request: &ChatCompletionRequest,
     qdrant_config: &QdrantConfig,
 ) -> Result<RetrieveObject, Response<Body>> {
     info!(target: "stdout", "Compute embeddings for user query.");
@@ -632,9 +594,52 @@ async fn retrieve_context(
         retrieve_object.points = Some(Vec::new());
     }
 
-    info!(target: "stdout", "{} point(s) retrieved", retrieve_object.points.as_ref().unwrap().len());
+    info!(target: "stdout", "{} point(s) retrieved from the collection `{}`", retrieve_object.points.as_ref().unwrap().len(), qdrant_config.collection_name);
 
     Ok(retrieve_object)
+}
+
+async fn retrieve_context_with_multiple_qdrant_configs(
+    chat_request: &ChatCompletionRequest,
+    qdrant_config_vec: &[QdrantConfig],
+) -> Result<Vec<RetrieveObject>, Response<Body>> {
+    let mut retrieve_object_vec: Vec<RetrieveObject> = Vec::new();
+    let mut set: HashSet<String> = HashSet::new();
+    for qdrant_config in qdrant_config_vec {
+        let mut retrieve_object =
+            retrieve_context_with_single_qdrant_config(chat_request, qdrant_config).await?;
+
+        if let Some(points) = retrieve_object.points.as_mut() {
+            if !points.is_empty() {
+                // find the duplicate points
+                let mut idx_removed = vec![];
+                for (idx, point) in points.iter().enumerate() {
+                    if set.contains(&point.source) {
+                        idx_removed.push(idx);
+                    } else {
+                        set.insert(point.source.clone());
+                    }
+                }
+
+                // remove the duplicate points
+                if !idx_removed.is_empty() {
+                    let num = idx_removed.len();
+
+                    for idx in idx_removed.iter().rev() {
+                        points.remove(*idx);
+                    }
+
+                    info!(target: "stdout", "removed duplicated {} point(s) retrieved from the collection `{}`", num, qdrant_config.collection_name);
+                }
+
+                if !points.is_empty() {
+                    retrieve_object_vec.push(retrieve_object);
+                }
+            }
+        }
+    }
+
+    Ok(retrieve_object_vec)
 }
 
 #[derive(Debug, Default)]
@@ -1506,20 +1511,8 @@ pub(crate) async fn create_rag_handler(
     // log
     info!(target: "stdout", "Handling the coming doc_to_embeddings request.");
 
-    let mut qdrant_config = match SERVER_INFO.get() {
-        Some(server_info) => server_info.read().await.qdrant_config.clone(),
-        None => {
-            let err_msg = "The server info is not set.";
-
-            // log
-            error!(target: "stdout", "{}", &err_msg);
-
-            return error::internal_server_error(err_msg);
-        }
-    };
-
     // upload the target rag document
-    let file_object = if req.method() == Method::POST {
+    let (file_object, url_vdb_server, collection_name) = if req.method() == Method::POST {
         let boundary = "boundary=";
 
         let boundary = req.headers().get("content-type").and_then(|ct| {
@@ -1546,6 +1539,8 @@ pub(crate) async fn create_rag_handler(
         let mut multipart = Multipart::with_body(cursor, boundary.unwrap());
 
         let mut file_object: Option<FileObject> = None;
+        let mut url_vdb_server: String = String::new();
+        let mut collection_name: String = String::new();
         while let ReadEntryResult::Entry(mut field) = multipart.read_entry_mut() {
             match &*field.headers.name {
                 "file" => {
@@ -1639,9 +1634,7 @@ pub(crate) async fn create_rag_handler(
                 }
                 "url_vdb_server" => match field.is_text() {
                     true => {
-                        let mut qdrant_url: String = String::new();
-
-                        if let Err(e) = field.data.read_to_string(&mut qdrant_url) {
+                        if let Err(e) = field.data.read_to_string(&mut url_vdb_server) {
                             let err_msg = format!("Failed to read the url_vdb_server field. {}", e);
 
                             // log
@@ -1649,8 +1642,6 @@ pub(crate) async fn create_rag_handler(
 
                             return error::internal_server_error(err_msg);
                         }
-
-                        qdrant_config.url = qdrant_url;
                     }
                     false => {
                         let err_msg =
@@ -1664,9 +1655,7 @@ pub(crate) async fn create_rag_handler(
                 },
                 "collection_name" => match field.is_text() {
                     true => {
-                        let mut qdrant_collection_name: String = String::new();
-
-                        if let Err(e) = field.data.read_to_string(&mut qdrant_collection_name) {
+                        if let Err(e) = field.data.read_to_string(&mut collection_name) {
                             let err_msg =
                                 format!("Failed to read the collection_name field. {}", e);
 
@@ -1675,8 +1664,6 @@ pub(crate) async fn create_rag_handler(
 
                             return error::internal_server_error(err_msg);
                         }
-
-                        qdrant_config.collection_name = qdrant_collection_name;
                     }
                     false => {
                         let err_msg = "Failed to get `collection_name`. The `collection_name` field in the request should be a text field.";
@@ -1698,8 +1685,39 @@ pub(crate) async fn create_rag_handler(
             }
         }
 
+        match (url_vdb_server.is_empty(), collection_name.is_empty()) {
+            (true, true) => {
+                let qdrant_config_vec = match SERVER_INFO.get() {
+                    Some(server_info) => server_info.read().await.qdrant_config.clone(),
+                    None => {
+                        let err_msg = "The server info is not set.";
+
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                };
+
+                // use the first qdrant config as the default config
+                url_vdb_server = qdrant_config_vec[0].url.clone();
+                collection_name = qdrant_config_vec[0].collection_name.clone();
+            }
+            (true, false) | (false, true) => {
+                let err_msg = "Failed to get `url_vdb_server` or `collection_name`. The `url_vdb_server` and `collection_name` fields in the request should be provided at the same time.";
+
+                // log
+                error!(target: "stdout", "{}", &err_msg);
+
+                return error::internal_server_error(err_msg);
+            }
+            (false, false) => {}
+        }
+
+        info!(target: "stdout", "url_vdb_server: {}, collection_name: {}", &url_vdb_server, &collection_name);
+
         match file_object {
-            Some(fo) => fo,
+            Some(fo) => (fo, url_vdb_server, collection_name),
             None => {
                 let err_msg = "Failed to upload the target file. Not found the target file.";
 
@@ -1858,16 +1876,14 @@ pub(crate) async fn create_rag_handler(
 
         info!(target: "stdout", "Prepare the rag embedding request.");
 
-        info!(target: "stdout", "VectorDB config: {}", qdrant_config);
-
         // create an embedding request
         let embedding_request = EmbeddingRequest {
             model: Some(model),
             input: chunks.into(),
             encoding_format: None,
             user: None,
-            qdrant_url: Some(qdrant_config.url),
-            qdrant_collection_name: Some(qdrant_config.collection_name),
+            qdrant_url: Some(url_vdb_server),
+            qdrant_collection_name: Some(collection_name),
         };
 
         match rag_doc_chunks_to_embeddings(&embedding_request).await {
@@ -2038,68 +2054,28 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     info!(target: "stdout", "user: {}", &id);
 
     // qdrant config
-    let qdrant_config = match (
-        chat_request.qdrant_url.as_ref(),
-        chat_request.qdrant_collection_name.as_ref(),
-    ) {
-        (Some(url), Some(collection_name)) => {
-            info!(target: "stdout", "qdrant url: {}, collection name: {}", url, collection_name);
+    let qdrant_config_vec = match get_qdrant_configs(&chat_request).await {
+        Ok(qdrant_config_vec) => qdrant_config_vec,
+        Err(e) => return error::internal_server_error(e.to_string()),
+    };
 
-            let limit = match chat_request.limit {
-                Some(limit) => limit,
-                None => SERVER_INFO.get().unwrap().read().await.qdrant_config.limit,
-            };
-
-            let score_threshold = match chat_request.score_threshold {
-                Some(score_threshold) => score_threshold,
-                None => {
-                    SERVER_INFO
-                        .get()
-                        .unwrap()
-                        .read()
-                        .await
-                        .qdrant_config
-                        .score_threshold
-                }
-            };
-
-            QdrantConfig {
-                url: url.clone(),
-                collection_name: collection_name.clone(),
-                limit,
-                score_threshold,
+    // retrieve context
+    let retrieve_object_vec =
+        match retrieve_context_with_multiple_qdrant_configs(&mut chat_request, &qdrant_config_vec)
+            .await
+        {
+            Ok(retrieve_object_vec) => retrieve_object_vec,
+            Err(response) => {
+                return response;
             }
-        }
-        (None, None) => {
-            info!(target: "stdout", "qdrant url and collection name are not set.");
+        };
 
-            SERVER_INFO
-                .get()
-                .unwrap()
-                .read()
-                .await
-                .qdrant_config
-                .clone()
-        }
-        _ => {
-            let err_msg = "The qdrant url or collection name is not set.";
-
-            error!(target: "stdout", "{}", &err_msg);
-
-            return error::internal_server_error(err_msg);
-        }
-    };
-
-    let retrieve_object = match retrieve_context(&mut chat_request, &qdrant_config).await {
-        Ok(retrieve_object) => retrieve_object,
-        Err(response) => {
-            return response;
-        }
-    };
+    // log retrieve object
+    debug!(target: "stdout", "retrieve_object_vec:\n{}", serde_json::to_string_pretty(&retrieve_object_vec).unwrap());
 
     let res = {
         // serialize retrieve object
-        let s = match serde_json::to_string(&retrieve_object) {
+        let s = match serde_json::to_string(&retrieve_object_vec) {
             Ok(s) => s,
             Err(e) => {
                 let err_msg = format!("Fail to serialize retrieve object. {}", e);
@@ -2136,4 +2112,77 @@ pub(crate) async fn retrieve_handler(mut req: Request<Body>) -> Response<Body> {
     info!(target: "stdout", "Send the retrieve response.");
 
     res
+}
+
+async fn get_qdrant_configs(
+    chat_request: &ChatCompletionRequest,
+) -> Result<Vec<QdrantConfig>, error::ServerError> {
+    match (
+        chat_request.url_vdb_server.as_deref(),
+        chat_request.collection_name.as_deref(),
+        chat_request.limit.as_deref(),
+        chat_request.score_threshold.as_deref(),
+    ) {
+        (Some(url), Some(collection_name), Some(limit), Some(score_threshold)) => {
+            // check if the length of collection name, limit, score_threshold are same
+            if collection_name.len() != limit.len()
+                || collection_name.len() != score_threshold.len()
+            {
+                let err_msg =
+                    "The number of elements of `collection name`, `limit`, `score_threshold` in the request should be same.";
+
+                // log
+                error!(target: "stdout", "{}", &err_msg);
+
+                return Err(error::ServerError::Operation(err_msg.into()));
+            }
+
+            info!(target: "stdout", "use the VectorDB settings from the request.");
+
+            let collection_name_str = collection_name.join(",");
+            let limit_str = limit
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<String>>()
+                .join(",");
+            let score_threshold_str = score_threshold
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<String>>()
+                .join(",");
+            info!(target: "stdout", "qdrant url: {}, collection name: {}, limit: {}, score threshold: {}", url, collection_name_str, limit_str, score_threshold_str);
+
+            let mut qdrant_config_vec = vec![];
+            for (idx, col_name) in collection_name.iter().enumerate() {
+                qdrant_config_vec.push(QdrantConfig {
+                    url: url.to_string(),
+                    collection_name: col_name.to_string(),
+                    limit: limit[idx],
+                    score_threshold: score_threshold[idx],
+                });
+            }
+
+            Ok(qdrant_config_vec)
+        }
+        (None, None, None, None) => {
+            info!(target: "stdout", "use the default VectorDB settings.");
+
+            let qdrant_config_vec = SERVER_INFO
+                .get()
+                .unwrap()
+                .read()
+                .await
+                .qdrant_config
+                .clone();
+
+            Ok(qdrant_config_vec)
+        }
+        _ => {
+            let err_msg = "The VectorDB settings in the request are not correct. The `url_vdb_server`, `collection_name`, `limit`, `score_threshold` fields in the request should be provided. The number of elements of `collection name`, `limit`, `score_threshold` should be same.";
+
+            error!(target: "stdout", "{}", &err_msg);
+
+            Err(error::ServerError::Operation(err_msg.into()))
+        }
+    }
 }
