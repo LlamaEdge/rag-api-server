@@ -353,7 +353,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.18.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-rag-multi-collections#e00a640585928e760e3e548e7b7a77be6604af68"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#f9b84a4e3861b4978d9fdb919e1f407569734d30"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -610,7 +610,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.19.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-rag-multi-collections#e00a640585928e760e3e548e7b7a77be6604af68"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#f9b84a4e3861b4978d9fdb919e1f407569734d30"
 dependencies = [
  "indexmap",
  "serde",
@@ -1422,7 +1422,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 [[package]]
 name = "llama-core"
 version = "0.23.3"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-rag-multi-collections#e00a640585928e760e3e548e7b7a77be6604af68"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#f9b84a4e3861b4978d9fdb919e1f407569734d30"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
@@ -1987,8 +1987,8 @@ dependencies = [
 
 [[package]]
 name = "qdrant_rest_client"
-version = "0.1.3"
-source = "git+https://github.com/second-state/qdrant-rest-client.git?branch=main#0618941b7e8470404659f3bf39be911e5a5ea112"
+version = "0.1.4"
+source = "git+https://github.com/second-state/qdrant-rest-client.git?branch=main#c562b3e18ce2e3c1c97d7affba8a8e551faea55c"
 dependencies = [
  "anyhow",
  "http 1.2.0",
