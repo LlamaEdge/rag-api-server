@@ -579,8 +579,6 @@ cargo build --target wasm32-wasi --release --features full
 cp target/wasm32-wasi/release/rag-api-server.wasm .
 ```
 
-<details> <summary> To check the CLI options, </summary>
-
 To check the CLI options of the `rag-api-server` wasm app, you can run the following command:
 
   ```bash
