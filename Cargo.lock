@@ -2035,7 +2035,7 @@ dependencies = [
 
 [[package]]
 name = "rag-api-server"
-version = "0.9.17"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "chat-prompts",
