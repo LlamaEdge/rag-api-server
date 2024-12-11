@@ -2,6 +2,9 @@
 
 LlamaEdge-RAG interacts with external VectorDB through two approaches: one is via the CLI options of rag-api-server, and the other is through the request fields. In the following two sections, these two approaches are discussed separately. For the convenience of the following discussion, Qdrant is used as the example VectorDB.
 
+> [!NOTE]
+> Sinece v0.11.0 release, the VectorDB support addressed below is supported by LlamaEdge-RAG.
+
 ## Via CLI options
 
 If retrieving information from a fixed VectorDB, this method is recommended. The startup command of rag-api-server provides four command-line options, which are:
