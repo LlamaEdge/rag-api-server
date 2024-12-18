@@ -31,6 +31,8 @@ pub(crate) static GLOBAL_RAG_PROMPT: OnceCell<String> = OnceCell::new();
 pub(crate) static SERVER_INFO: OnceCell<RwLock<ServerInfo>> = OnceCell::new();
 // API key
 pub(crate) static LLAMA_API_KEY: OnceCell<String> = OnceCell::new();
+// Global context window used for setting the max number of user messages for the retrieval
+pub(crate) static CONTEXT_WINDOW: OnceCell<u64> = OnceCell::new();
 
 // default port
 const DEFAULT_PORT: &str = "8080";
@@ -115,6 +117,9 @@ struct Cli {
     /// Maximum number of tokens each chunk contains
     #[arg(long, default_value = "100", value_parser = clap::value_parser!(usize))]
     chunk_capacity: usize,
+    /// Maximum number of user messages used in the retrieval
+    #[arg(long, default_value = "1", value_parser = clap::value_parser!(u64))]
+    context_window: u64,
     /// Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`.
     #[arg(long, default_value = None, value_parser = clap::value_parser!(SocketAddr), group = "socket_address_group")]
     socket_addr: Option<SocketAddr>,
@@ -361,6 +366,12 @@ async fn main() -> Result<(), ServerError> {
 
     // log chunk capacity
     info!(target: "stdout", "chunk_capacity: {}", &cli.chunk_capacity);
+
+    // log context window
+    info!(target: "stdout", "context_window: {}", &cli.context_window);
+    CONTEXT_WINDOW
+        .set(cli.context_window)
+        .map_err(|e| ServerError::Operation(format!("Failed to set `CONTEXT_WINDOW`. {}", e)))?;
 
     // RAG policy
     info!(target: "stdout", "rag_policy: {}", &cli.policy);

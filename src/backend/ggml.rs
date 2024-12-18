@@ -1,4 +1,6 @@
-use crate::{error, utils::gen_chat_id, QdrantConfig, GLOBAL_RAG_PROMPT, SERVER_INFO};
+use crate::{
+    error, utils::gen_chat_id, QdrantConfig, CONTEXT_WINDOW, GLOBAL_RAG_PROMPT, SERVER_INFO,
+};
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
@@ -459,7 +461,11 @@ async fn retrieve_context_with_single_qdrant_config(
 ) -> Result<RetrieveObject, Response<Body>> {
     info!(target: "stdout", "Compute embeddings for user query.");
 
-    let context_window = chat_request.context_window.unwrap() as usize;
+    // get context_window: chat_request.context_window prioritized CONTEXT_WINDOW
+    let context_window = chat_request
+        .context_window
+        .or_else(|| CONTEXT_WINDOW.get().copied())
+        .unwrap_or(1);
     info!(target: "stdout", "context window: {}", context_window);
 
     info!(target: "stdout", "VectorDB config: {}", qdrant_config);
@@ -500,7 +506,7 @@ async fn retrieve_context_with_single_qdrant_config(
                     }
                 }
 
-                if last_messages.len() == context_window {
+                if last_messages.len() == context_window as usize {
                     break;
                 }
             }
