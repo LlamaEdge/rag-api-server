@@ -629,6 +629,8 @@ Options:
           Minimal score threshold for the search result [default: 0.4]
       --chunk-capacity <CHUNK_CAPACITY>
           Maximum number of tokens each chunk contains [default: 100]
+      --context-window <CONTEXT_WINDOW>
+          Maximum number of user messages used in the retrieval [default: 1]
       --socket-addr <SOCKET_ADDR>
           Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`
       --port <PORT>
