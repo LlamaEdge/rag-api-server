@@ -353,8 +353,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d883459c2bfd23099ce328c7746571fe4992c0e72086750abfe51129203aead"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#04dd747cd7ab13990249536ea7a4be0ae00d67b9"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -611,8 +610,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c810ae5a23dc101c0313ef08bd36eca6c664ba93c5f7540a03bef4530b09edb7"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#04dd747cd7ab13990249536ea7a4be0ae00d67b9"
 dependencies = [
  "indexmap",
  "serde",
@@ -1424,8 +1422,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 [[package]]
 name = "llama-core"
 version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8697c23cdcc41f90e2e775878d1c7da79945ae788bcb9caa70d940e66a518e18"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#04dd747cd7ab13990249536ea7a4be0ae00d67b9"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
