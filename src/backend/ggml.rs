@@ -481,42 +481,33 @@ async fn retrieve_context_with_single_qdrant_config(
             return Err(error::bad_request(err_msg));
         }
         false => {
-            // get the user messages in the context window
-            let mut last_messages = Vec::new();
+            // get the last `n` user messages in the context window.
+            // `n` is determined by the `context_window` in the chat request.
+            let mut last_n_user_messages = Vec::new();
             for (idx, message) in chat_request.messages.iter().rev().enumerate() {
                 if let ChatCompletionRequestMessage::User(user_message) = message {
-                    let user_content = match user_message.content() {
-                        ChatCompletionUserMessageContent::Text(text) => text,
-                        _ => {
-                            let err_msg = "The last message must be a text content user message";
-
-                            // log
-                            error!(target: "stdout", "{}", &err_msg);
-
-                            return Err(error::bad_request(err_msg));
+                    if let ChatCompletionUserMessageContent::Text(text) = user_message.content() {
+                        if !text.ends_with("<server-health>") {
+                            last_n_user_messages.push(text.clone());
+                        } else if idx == 0 {
+                            let content = text.trim_end_matches("<server-health>").to_string();
+                            last_n_user_messages.push(content);
+                            break;
                         }
-                    };
-
-                    if !user_content.ends_with("<server-health>") {
-                        last_messages.push(user_content.clone());
-                    } else if idx == 0 {
-                        let content = user_content.trim_end_matches("<server-health>").to_string();
-                        last_messages.push(content);
-                        break;
                     }
                 }
 
-                if last_messages.len() == context_window as usize {
+                if last_n_user_messages.len() == context_window as usize {
                     break;
                 }
             }
 
             // join the user messages in the context window into a single string
-            let query_text = if !last_messages.is_empty() {
-                info!(target: "stdout", "Found the latest {} user messages.", last_messages.len());
+            let query_text = if !last_n_user_messages.is_empty() {
+                info!(target: "stdout", "Found the latest {} user messages.", last_n_user_messages.len());
 
-                last_messages.reverse();
-                last_messages.join("\n")
+                last_n_user_messages.reverse();
+                last_n_user_messages.join("\n")
             } else {
                 let warn_msg = "No user messages found.";
 
