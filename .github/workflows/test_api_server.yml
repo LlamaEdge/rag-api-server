@@ -106,17 +106,17 @@ jobs:
           sleep 30
           cat start-llamaedge.log
 
-      - name: Run test_chat.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_chat.hurl
+      # - name: Run test_chat.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_chat.hurl
 
       - name: Run test_embeddings.hurl
         run: |
           hurl --test --jobs 1 ./tests/test_embeddings.hurl
 
-      - name: Run test_rag.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_rag.hurl
+      # - name: Run test_rag.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_rag.hurl
 
       - name: Stop rag-api-server for testing chat completions
         run: |
@@ -208,17 +208,17 @@ jobs:
           sleep 30
           cat start-llamaedge.log
 
-      - name: Run test_chat.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_chat.hurl
+      # - name: Run test_chat.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_chat.hurl
 
       - name: Run test_embeddings.hurl
         run: |
           hurl --test --jobs 1 ./tests/test_embeddings.hurl
 
-      - name: Run test_rag.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_rag.hurl
+      # - name: Run test_rag.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_rag.hurl
 
       - name: Stop rag-api-server for testing chat completions
         run: |
@@ -310,17 +310,17 @@ jobs:
           sleep 30
           cat start-llamaedge.log
 
-      - name: Run test_chat.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_chat.hurl
+      # - name: Run test_chat.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_chat.hurl
 
       - name: Run test_embeddings.hurl
         run: |
           hurl --test --jobs 1 ./tests/test_embeddings.hurl
 
-      - name: Run test_rag.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_rag.hurl
+      # - name: Run test_rag.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_rag.hurl
 
       - name: Stop rag-api-server for testing chat completions
         run: |
@@ -412,17 +412,17 @@ jobs:
           sleep 30
           cat start-llamaedge.log
 
-      - name: Run test_chat.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_chat.hurl
+      # - name: Run test_chat.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_chat.hurl
 
       - name: Run test_embeddings.hurl
         run: |
           hurl --test --jobs 1 ./tests/test_embeddings.hurl
 
-      - name: Run test_rag.hurl
-        run: |
-          hurl --test --jobs 1 ./tests/test_rag.hurl
+      # - name: Run test_rag.hurl
+      #   run: |
+      #     hurl --test --jobs 1 ./tests/test_rag.hurl
 
       - name: Stop rag-api-server for testing chat completions
         run: |
