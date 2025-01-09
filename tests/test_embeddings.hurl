@@ -27,7 +27,7 @@ jsonpath "$.data" count > 0
 
 # test /v1/embeddings endpoint
 # Test purpose: The model name is incorrect
-POST http://localhost:9069/v1/embeddings
+POST http://localhost:8080/v1/embeddings
 Accept: application/json
 Content-Type: application/json
 ```json
