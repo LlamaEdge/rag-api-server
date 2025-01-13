@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # Find unused dependencies in Cargo.toml
 cargo +nightly udeps
@@ -6,7 +7,7 @@ cargo +nightly udeps
 cargo sort
 
 # Format code
-cargo fmt
+cargo +nightly fmt --all -- --check
 
 # Clippy
-cargo +nightly clippy --all-features -- -D warnings
+cargo +nightly clippy --target wasm32-wasip1 --all-features -- -D warnings
