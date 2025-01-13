@@ -615,6 +615,8 @@ Options:
           JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead
   -b, --batch-size <BATCH_SIZE>
           Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model [default: 512,512]
+  -u, --ubatch-size <UBATCH_SIZE>
+          Sets physical maximum batch sizes for chat and/or embedding models. To run both chat and embedding models, the sizes should be separated by comma without space, for example, '--ubatch-size 512,512'. The first value is for the chat model, and the second for the embedding model [default: 512,512]
       --rag-prompt <RAG_PROMPT>
           Custom rag prompt
       --rag-policy <POLICY>

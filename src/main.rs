@@ -99,6 +99,9 @@ struct Cli {
     /// Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model.
     #[arg(short, long, value_delimiter = ',', default_value = "512,512", value_parser = clap::value_parser!(u64))]
     batch_size: Vec<u64>,
+    /// Sets physical maximum batch sizes for chat and/or embedding models. To run both chat and embedding models, the sizes should be separated by comma without space, for example, '--ubatch-size 512,512'. The first value is for the chat model, and the second for the embedding model.
+    #[arg(short, long, value_delimiter = ',', default_value = "512,512", value_parser = clap::value_parser!(u64))]
+    ubatch_size: Vec<u64>,
     /// Custom rag prompt.
     #[arg(long)]
     rag_prompt: Option<String>,
@@ -223,6 +226,20 @@ async fn main() -> Result<(), ServerError> {
         .collect::<Vec<String>>()
         .join(",");
     info!(target: "stdout", "batch_size: {}", batch_sizes_str);
+
+    // log ubatch size
+    if cli.ubatch_size.len() != 2 {
+        return Err(ServerError::ArgumentError(
+            "LlamaEdge RAG API server requires two ubatch sizes: one for chat model, one for embedding model.".to_owned(),
+        ));
+    }
+    let ubatch_sizes_str: String = cli
+        .ubatch_size
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    info!(target: "stdout", "ubatch_size: {}", ubatch_sizes_str);
 
     // log prompt template
     if cli.prompt_template.len() != 2 {
@@ -399,6 +416,7 @@ async fn main() -> Result<(), ServerError> {
     .with_ctx_size(cli.ctx_size[0])
     .with_reverse_prompt(cli.reverse_prompt)
     .with_batch_size(cli.batch_size[0])
+    .with_ubatch_size(cli.ubatch_size[0])
     .with_n_predict(cli.n_predict)
     .with_n_gpu_layers(cli.n_gpu_layers)
     .with_split_mode(cli.split_mode.clone())
@@ -420,6 +438,7 @@ async fn main() -> Result<(), ServerError> {
         n_gpu_layers: chat_metadata.n_gpu_layers,
         ctx_size: chat_metadata.ctx_size,
         batch_size: chat_metadata.batch_size,
+        ubatch_size: chat_metadata.ubatch_size,
         temperature: chat_metadata.temperature,
         top_p: chat_metadata.top_p,
         repeat_penalty: chat_metadata.repeat_penalty,
@@ -441,6 +460,7 @@ async fn main() -> Result<(), ServerError> {
     )
     .with_ctx_size(cli.ctx_size[1])
     .with_batch_size(cli.batch_size[1])
+    .with_ubatch_size(cli.ubatch_size[1])
     .with_split_mode(cli.split_mode)
     .with_main_gpu(cli.main_gpu)
     .with_tensor_split(cli.tensor_split)
@@ -454,6 +474,7 @@ async fn main() -> Result<(), ServerError> {
         ty: "embedding".to_string(),
         ctx_size: embedding_metadata.ctx_size,
         batch_size: embedding_metadata.batch_size,
+        ubatch_size: embedding_metadata.ubatch_size,
         prompt_template: embedding_metadata.prompt_template,
         n_predict: embedding_metadata.n_predict,
         reverse_prompt: embedding_metadata.reverse_prompt.clone(),
@@ -702,6 +723,7 @@ pub(crate) struct ModelConfig {
     ty: String,
     pub ctx_size: u64,
     pub batch_size: u64,
+    pub ubatch_size: u64,
     pub prompt_template: PromptTemplateType,
     pub n_predict: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
