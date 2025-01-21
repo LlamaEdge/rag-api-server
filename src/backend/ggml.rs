@@ -372,92 +372,93 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     debug!(target: "stdout", "retrieve_object_vec:\n{}", serde_json::to_string_pretty(&retrieve_object_vec).unwrap());
 
     // fuse kw-search and embedding-search results
-    if !kw_hits.is_empty() {
-        if !retrieve_object_vec.is_empty() && retrieve_object_vec[0].points.is_some() {
-            let points = retrieve_object_vec[0].points.as_ref().unwrap().clone();
-            if !points.is_empty() {
-                let limit = retrieve_object_vec[0].limit;
-                let score_threshold = retrieve_object_vec[0].score_threshold;
+    if !kw_hits.is_empty()
+        && !retrieve_object_vec.is_empty()
+        && retrieve_object_vec[0].points.is_some()
+    {
+        let points = retrieve_object_vec[0].points.as_ref().unwrap().clone();
+        if !points.is_empty() {
+            let limit = retrieve_object_vec[0].limit;
+            let score_threshold = retrieve_object_vec[0].score_threshold;
 
-                // create a hash map from retrieve_object_vec: key is the hash value of the source of the point, value is the point
-                let mut em_hits_map = HashMap::new();
-                let mut em_scores = HashMap::new();
+            // create a hash map from retrieve_object_vec: key is the hash value of the source of the point, value is the point
+            let mut em_hits_map = HashMap::new();
+            let mut em_scores = HashMap::new();
 
-                for point in points {
-                    let hash_value = calculate_hash(&point.source);
-                    em_scores.insert(hash_value, point.score);
-                    em_hits_map.insert(hash_value, point);
-                }
+            for point in points {
+                let hash_value = calculate_hash(&point.source);
+                em_scores.insert(hash_value, point.score);
+                em_hits_map.insert(hash_value, point);
+            }
 
-                info!(target: "stdout", "em_hits_map: {:#?}", &em_hits_map);
+            info!(target: "stdout", "em_hits_map: {:#?}", &em_hits_map);
 
-                // normalize the em_scores
-                let em_scores = normalize(&em_scores);
+            // normalize the em_scores
+            let em_scores = normalize(&em_scores);
 
-                info!(target: "stdout", "em_scores: {:#?}", &em_scores);
+            info!(target: "stdout", "em_scores: {:#?}", &em_scores);
 
-                // create a hash map from kw_hits: key is the hash value of the content of the hit, value is the hit
-                let mut kw_hits_map = HashMap::new();
-                let mut kw_scores = HashMap::new();
-                for hit in kw_hits {
-                    let hash_value = calculate_hash(&hit.content);
-                    kw_scores.insert(hash_value, hit.score);
-                    kw_hits_map.insert(hash_value, hit);
-                }
+            // create a hash map from kw_hits: key is the hash value of the content of the hit, value is the hit
+            let mut kw_hits_map = HashMap::new();
+            let mut kw_scores = HashMap::new();
+            for hit in kw_hits {
+                let hash_value = calculate_hash(&hit.content);
+                kw_scores.insert(hash_value, hit.score);
+                kw_hits_map.insert(hash_value, hit);
+            }
 
-                info!(target: "stdout", "kw_hits_map: {:#?}", &kw_hits_map);
+            info!(target: "stdout", "kw_hits_map: {:#?}", &kw_hits_map);
 
-                // normalize the kw_scores
-                let kw_scores = normalize(&kw_scores);
+            // normalize the kw_scores
+            let kw_scores = normalize(&kw_scores);
 
-                info!(target: "stdout", "kw_scores: {:#?}", &kw_scores);
+            info!(target: "stdout", "kw_scores: {:#?}", &kw_scores);
 
-                // Set weight alpha
-                let alpha = 0.7;
+            // Set weight alpha
+            let alpha = 0.7;
 
-                // fuse the two hash maps
-                let final_scores = weighted_fusion(kw_scores, em_scores, alpha);
+            // fuse the two hash maps
+            let final_scores = weighted_fusion(kw_scores, em_scores, alpha);
 
-                info!(target: "stdout", "final_scores: {:#?}", &final_scores);
+            info!(target: "stdout", "final_scores: {:#?}", &final_scores);
 
-                // Sort by score from high to low
-                let mut final_ranking: Vec<(u64, f32)> = final_scores.into_iter().collect();
-                final_ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            // Sort by score from high to low
+            let mut final_ranking: Vec<(u64, f32)> = final_scores.into_iter().collect();
+            final_ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-                // Print final ranking
-                info!(target: "stdout", "final_ranking: {:#?}", &final_ranking);
+            // Print final ranking
+            info!(target: "stdout", "final_ranking: {:#?}", &final_ranking);
 
-                let mut retrieved = Vec::new();
-                for (hash_value, score) in final_ranking {
-                    if score >= score_threshold {
-                        let mut doc = RagScoredPoint {
-                            source: String::new(),
-                            score,
-                        };
-                        if kw_hits_map.contains_key(&hash_value) {
-                            doc.source = kw_hits_map[&hash_value].content.clone();
-                            retrieved.push(doc);
-                        } else if em_hits_map.contains_key(&hash_value) {
-                            doc.source = em_hits_map[&hash_value].source.clone();
-                            retrieved.push(doc);
-                        }
+            let mut retrieved = Vec::new();
+            for (hash_value, score) in final_ranking {
+                if score >= score_threshold {
+                    let mut doc = RagScoredPoint {
+                        source: String::new(),
+                        score,
+                    };
+                    if kw_hits_map.contains_key(&hash_value) {
+                        doc.source = kw_hits_map[&hash_value].content.clone();
+                        retrieved.push(doc);
+                    } else if em_hits_map.contains_key(&hash_value) {
+                        doc.source = em_hits_map[&hash_value].source.clone();
+                        retrieved.push(doc);
                     }
                 }
-
-                if retrieved.len() > limit {
-                    retrieved.truncate(limit);
-                }
-
-                info!(target: "stdout", "retrieved: {:#?}", &retrieved);
-
-                let retrieve_object = RetrieveObject {
-                    limit,
-                    score_threshold,
-                    points: Some(retrieved),
-                };
-
-                retrieve_object_vec = vec![retrieve_object];
             }
+
+            if retrieved.len() > limit {
+                retrieved.truncate(limit);
+            }
+
+            info!(target: "stdout", "retrieved: {:#?}", &retrieved);
+
+            let retrieve_object = RetrieveObject {
+                limit,
+                score_threshold,
+                points: Some(retrieved),
+            };
+
+            retrieve_object_vec = vec![retrieve_object];
         }
     }
 

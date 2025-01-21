@@ -785,12 +785,7 @@ pub(crate) struct RagConfig {
     pub policy: MergeRagContextPolicy,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct KeywordSearchConfig {
     pub url: String,
-}
-impl Default for KeywordSearchConfig {
-    fn default() -> Self {
-        KeywordSearchConfig { url: String::new() }
-    }
 }
