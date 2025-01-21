@@ -33,6 +33,8 @@ pub(crate) static SERVER_INFO: OnceCell<RwLock<ServerInfo>> = OnceCell::new();
 pub(crate) static LLAMA_API_KEY: OnceCell<String> = OnceCell::new();
 // Global context window used for setting the max number of user messages for the retrieval
 pub(crate) static CONTEXT_WINDOW: OnceCell<u64> = OnceCell::new();
+// Global keyword search configuration
+pub(crate) static KW_SEARCH_CONFIG: OnceCell<KeywordSearchConfig> = OnceCell::new();
 
 // default port
 const DEFAULT_PORT: &str = "8080";
@@ -126,6 +128,9 @@ struct Cli {
     /// Maximum number of user messages used in the retrieval
     #[arg(long, default_value = "1", value_parser = clap::value_parser!(u64))]
     context_window: u64,
+    /// URL of the keyword search service
+    #[arg(long)]
+    kw_search_url: Option<String>,
     /// Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`.
     #[arg(long, default_value = None, value_parser = clap::value_parser!(SocketAddr), group = "socket_address_group")]
     socket_addr: Option<SocketAddr>,
@@ -405,6 +410,14 @@ async fn main() -> Result<(), ServerError> {
         warn!(target: "server_config", "{}", format!("The chat model does not support system message, while the '--policy' option sets to \"{}\". Update the RAG policy to {}.", cli.policy, MergeRagContextPolicy::LastUserMessage));
 
         policy = MergeRagContextPolicy::LastUserMessage;
+    }
+
+    // keyword search configuration
+    if let Some(kw_search_url) = &cli.kw_search_url {
+        let kw_search_config = KeywordSearchConfig {
+            url: kw_search_url.clone(),
+        };
+        KW_SEARCH_CONFIG.set(kw_search_config).unwrap();
     }
 
     // create metadata for chat model
@@ -770,4 +783,14 @@ pub(crate) struct RagConfig {
     pub embedding_model: ModelConfig,
     #[serde(rename = "rag_policy")]
     pub policy: MergeRagContextPolicy,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct KeywordSearchConfig {
+    pub url: String,
+}
+impl Default for KeywordSearchConfig {
+    fn default() -> Self {
+        KeywordSearchConfig { url: String::new() }
+    }
 }

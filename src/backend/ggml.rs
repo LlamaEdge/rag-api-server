@@ -1,12 +1,14 @@
 use crate::{
-    error, utils::gen_chat_id, QdrantConfig, CONTEXT_WINDOW, GLOBAL_RAG_PROMPT, SERVER_INFO,
+    error, utils::gen_chat_id, QdrantConfig, CONTEXT_WINDOW, GLOBAL_RAG_PROMPT, KW_SEARCH_CONFIG,
+    SERVER_INFO,
 };
 use chat_prompts::{error as ChatPromptsError, MergeRagContext, MergeRagContextPolicy};
 use endpoints::{
     chat::{ChatCompletionRequest, ChatCompletionRequestMessage, ChatCompletionUserMessageContent},
     embeddings::{ChunksRequest, ChunksResponse, EmbeddingRequest, InputText},
     files::{DeleteFileStatus, FileObject},
-    rag::RetrieveObject,
+    keyword_search::{DocumentInput, IndexRequest, IndexResponse, QueryRequest, QueryResponse},
+    rag::{CreateRagResponse, RagScoredPoint, RetrieveObject},
 };
 use futures_util::TryStreamExt;
 use hyper::{body::to_bytes, Body, Method, Request, Response};
@@ -17,8 +19,9 @@ use llama_core::{
 use multipart::server::{Multipart, ReadEntry, ReadEntryResult};
 use multipart_2021 as multipart;
 use std::{
-    collections::HashSet,
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     fs::{self, File},
+    hash::{Hash, Hasher},
     io::{Cursor, Read, Write},
     path::Path,
     time::SystemTime,
@@ -219,7 +222,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         }
     }
 
-    info!(target: "stdout", "Prepare the chat completion request.");
+    info!(target: "stdout", "Prepare the chat completion request");
 
     // parse request
     let body_bytes = match to_bytes(req.body_mut()).await {
@@ -261,6 +264,91 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     // log user id
     info!(target: "stdout", "user: {}", &id);
 
+    // perform keyword search
+    let mut kw_hits = Vec::new();
+    let mut kw_search_url = match &chat_request.kw_search_url {
+        Some(url) => url.clone(),
+        None => match KW_SEARCH_CONFIG.get() {
+            Some(kw_search_config) => kw_search_config.url.clone(),
+            None => String::new(),
+        },
+    };
+    if !kw_search_url.is_empty() {
+        kw_search_url = kw_search_url.trim_end_matches('/').to_string();
+        info!(target: "stdout", "kw_search_url: {}", &kw_search_url);
+
+        if let Some(index_name) = &chat_request.kw_index_name {
+            if !index_name.is_empty() {
+                if let Some(ChatCompletionRequestMessage::User(user_message)) =
+                    chat_request.messages.last()
+                {
+                    if let ChatCompletionUserMessageContent::Text(text) = user_message.content() {
+                        info!(target: "stdout", "perform keyword search on the index: {}", &index_name);
+
+                        let kw_top_k = chat_request.kw_top_k.unwrap();
+
+                        let user_query = text.clone();
+                        let query_request = QueryRequest {
+                            query: user_query,
+                            top_k: kw_top_k as usize,
+                            index: index_name.clone(),
+                        };
+
+                        let query_url = format!("{}/v1/search", &kw_search_url);
+                        info!(target: "stdout", "query_url: {}", &query_url);
+
+                        // send query request to the keyword search service
+                        match reqwest::Client::new()
+                            .post(&query_url)
+                            .json(&query_request)
+                            .send()
+                            .await
+                        {
+                            Ok(response) => {
+                                match response.json::<QueryResponse>().await {
+                                    Ok(query_response) => {
+                                        match query_response.error {
+                                            Some(error) => {
+                                                let err_msg = format!(
+                                                    "Failed to perform keyword search. Reason: {}",
+                                                    error
+                                                );
+
+                                                // log
+                                                warn!(target: "stdout", "{}", &err_msg);
+                                            }
+                                            None => {
+                                                info!(target: "stdout", "Number of keyword search hits: {}", &query_response.hits.len());
+
+                                                kw_hits = query_response.hits;
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let err_msg = format!(
+                                            "Failed to perform keyword search. Reason: {}",
+                                            e
+                                        );
+
+                                        // log
+                                        warn!(target: "stdout", "{}", &err_msg);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let err_msg =
+                                    format!("Failed to perform keyword search. Reason: {}", e);
+
+                                // log
+                                warn!(target: "stdout", "{}", &err_msg);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // qdrant config
     let qdrant_config_vec = match get_qdrant_configs(&chat_request).await {
         Ok(qdrant_config_vec) => qdrant_config_vec,
@@ -268,7 +356,7 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
     };
 
     // retrieve context
-    let retrieve_object_vec = match retrieve_context_with_multiple_qdrant_configs(
+    let mut retrieve_object_vec = match retrieve_context_with_multiple_qdrant_configs(
         &chat_request,
         &qdrant_config_vec,
     )
@@ -282,6 +370,96 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
 
     // log retrieve object
     debug!(target: "stdout", "retrieve_object_vec:\n{}", serde_json::to_string_pretty(&retrieve_object_vec).unwrap());
+
+    // fuse kw-search and embedding-search results
+    if !kw_hits.is_empty() {
+        if !retrieve_object_vec.is_empty() && retrieve_object_vec[0].points.is_some() {
+            let points = retrieve_object_vec[0].points.as_ref().unwrap().clone();
+            if !points.is_empty() {
+                let limit = retrieve_object_vec[0].limit;
+                let score_threshold = retrieve_object_vec[0].score_threshold;
+
+                // create a hash map from retrieve_object_vec: key is the hash value of the source of the point, value is the point
+                let mut em_hits_map = HashMap::new();
+                let mut em_scores = HashMap::new();
+
+                for point in points {
+                    let hash_value = calculate_hash(&point.source);
+                    em_scores.insert(hash_value, point.score);
+                    em_hits_map.insert(hash_value, point);
+                }
+
+                info!(target: "stdout", "em_hits_map: {:#?}", &em_hits_map);
+
+                // normalize the em_scores
+                let em_scores = normalize(&em_scores);
+
+                info!(target: "stdout", "em_scores: {:#?}", &em_scores);
+
+                // create a hash map from kw_hits: key is the hash value of the content of the hit, value is the hit
+                let mut kw_hits_map = HashMap::new();
+                let mut kw_scores = HashMap::new();
+                for hit in kw_hits {
+                    let hash_value = calculate_hash(&hit.content);
+                    kw_scores.insert(hash_value, hit.score);
+                    kw_hits_map.insert(hash_value, hit);
+                }
+
+                info!(target: "stdout", "kw_hits_map: {:#?}", &kw_hits_map);
+
+                // normalize the kw_scores
+                let kw_scores = normalize(&kw_scores);
+
+                info!(target: "stdout", "kw_scores: {:#?}", &kw_scores);
+
+                // Set weight alpha
+                let alpha = 0.7;
+
+                // fuse the two hash maps
+                let final_scores = weighted_fusion(kw_scores, em_scores, alpha);
+
+                info!(target: "stdout", "final_scores: {:#?}", &final_scores);
+
+                // Sort by score from high to low
+                let mut final_ranking: Vec<(u64, f32)> = final_scores.into_iter().collect();
+                final_ranking.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+                // Print final ranking
+                info!(target: "stdout", "final_ranking: {:#?}", &final_ranking);
+
+                let mut retrieved = Vec::new();
+                for (hash_value, score) in final_ranking {
+                    if score >= score_threshold {
+                        let mut doc = RagScoredPoint {
+                            source: String::new(),
+                            score,
+                        };
+                        if kw_hits_map.contains_key(&hash_value) {
+                            doc.source = kw_hits_map[&hash_value].content.clone();
+                            retrieved.push(doc);
+                        } else if em_hits_map.contains_key(&hash_value) {
+                            doc.source = em_hits_map[&hash_value].source.clone();
+                            retrieved.push(doc);
+                        }
+                    }
+                }
+
+                if retrieved.len() > limit {
+                    retrieved.truncate(limit);
+                }
+
+                info!(target: "stdout", "retrieved: {:#?}", &retrieved);
+
+                let retrieve_object = RetrieveObject {
+                    limit,
+                    score_threshold,
+                    points: Some(retrieved),
+                };
+
+                retrieve_object_vec = vec![retrieve_object];
+            }
+        }
+    }
 
     // * extract the context from retrieved objects
     let mut context = String::new();
@@ -504,7 +682,7 @@ async fn retrieve_context_with_single_qdrant_config(
 
             // join the user messages in the context window into a single string
             let query_text = if !last_n_user_messages.is_empty() {
-                info!(target: "stdout", "Found the latest {} user messages.", last_n_user_messages.len());
+                info!(target: "stdout", "Found the latest {} user messages", last_n_user_messages.len());
 
                 last_n_user_messages.reverse();
                 last_n_user_messages.join("\n")
@@ -1525,7 +1703,8 @@ pub(crate) async fn create_rag_handler(
     info!(target: "stdout", "Handling the coming doc_to_embeddings request.");
 
     // upload the target rag document
-    let (file_object, vdb_server_url, vdb_collection_name, vdb_api_key) = if req.method()
+    let (file_object, vdb_server_url, vdb_collection_name, vdb_api_key, kw_search_url) = if req
+        .method()
         == Method::POST
     {
         let boundary = "boundary=";
@@ -1557,6 +1736,7 @@ pub(crate) async fn create_rag_handler(
         let mut vdb_server_url: String = String::new();
         let mut vdb_collection_name: String = String::new();
         let mut vdb_api_key: String = String::new();
+        let mut kw_search_url = String::new();
         while let ReadEntryResult::Entry(mut field) = multipart.read_entry_mut() {
             match &*field.headers.name {
                 "file" => {
@@ -1572,6 +1752,8 @@ pub(crate) async fn create_rag_handler(
                             return error::internal_server_error(err_msg);
                         }
                     };
+
+                    info!(target: "stdout", "filename: {}", &filename);
 
                     if !((filename).to_lowercase().ends_with(".txt")
                         || (filename).to_lowercase().ends_with(".md"))
@@ -1711,6 +1893,27 @@ pub(crate) async fn create_rag_handler(
                         return error::internal_server_error(err_msg);
                     }
                 },
+                "kw_search_url" => match field.is_text() {
+                    true => {
+                        if let Err(e) = field.data.read_to_string(&mut kw_search_url) {
+                            let err_msg =
+                                format!("Failed to read the `kw_search_url` field. {}", e);
+
+                            // log
+                            error!(target: "stdout", "{}", &err_msg);
+
+                            return error::internal_server_error(err_msg);
+                        }
+                    }
+                    false => {
+                        let err_msg = "Failed to get `kw_search_url`. The `kw_search_url` field in the request should be a text field.";
+
+                        // log
+                        error!(target: "stdout", "{}", &err_msg);
+
+                        return error::internal_server_error(err_msg);
+                    }
+                },
                 _ => {
                     let err_msg = format!("Invalid field name: {}", &field.headers.name);
 
@@ -1755,10 +1958,27 @@ pub(crate) async fn create_rag_handler(
             (false, false) => {}
         }
 
+        // if kw_search_url is not provided, try to get the default kw_search_url from KW_SEARCH_CONFIG
+        if kw_search_url.is_empty() {
+            if let Some(kw_search_config) = KW_SEARCH_CONFIG.get() {
+                kw_search_url = kw_search_config.url.clone();
+            }
+        }
+        if !kw_search_url.is_empty() {
+            kw_search_url = kw_search_url.trim_end_matches('/').to_string();
+            info!(target: "stdout", "kw_search_url: {}", &kw_search_url);
+        }
+
         info!(target: "stdout", "vdb_server_url: {}, vdb_collection_name: {}", &vdb_server_url, &vdb_collection_name);
 
         match file_object {
-            Some(fo) => (fo, vdb_server_url, vdb_collection_name, vdb_api_key),
+            Some(fo) => (
+                fo,
+                vdb_server_url,
+                vdb_collection_name,
+                vdb_api_key,
+                kw_search_url,
+            ),
             None => {
                 let err_msg = "Failed to upload the target file. Not found the target file.";
 
@@ -1900,8 +2120,37 @@ pub(crate) async fn create_rag_handler(
         }
     };
 
+    // create index for chunks
+    let mut index_response: Option<IndexResponse> = None;
+    if !kw_search_url.is_empty() {
+        let index_url = format!("{}/v1/index", &kw_search_url);
+        info!(target: "stdout", "index_url: {}", &index_url);
+
+        let mut index_request = IndexRequest { documents: vec![] };
+        for chunk in chunks.iter() {
+            let document_input = DocumentInput {
+                content: chunk.clone(),
+                title: None,
+            };
+            index_request.documents.push(document_input);
+        }
+
+        info!(target: "stdout", "Sending index request to kw-search-server");
+
+        if let Ok(response) = reqwest::Client::new()
+            .post(&index_url)
+            .json(&index_request)
+            .send()
+            .await
+        {
+            if let Ok(idx_response) = response.json::<IndexResponse>().await {
+                index_response = Some(idx_response);
+            }
+        }
+    }
+
     // compute embeddings for chunks
-    let embedding_response = {
+    let embeddings_response = {
         // get the name of embedding model
         let model = match llama_core::utils::embedding_model_names() {
             Ok(model_names) => model_names[0].clone(),
@@ -1946,8 +2195,21 @@ pub(crate) async fn create_rag_handler(
         }
     };
 
+    // create the create rag response
+    let create_rag_response = if index_response.is_some() {
+        CreateRagResponse {
+            index_response,
+            embeddings_response,
+        }
+    } else {
+        CreateRagResponse {
+            index_response: None,
+            embeddings_response,
+        }
+    };
+
     // serialize embedding response
-    let res = match serde_json::to_string(&embedding_response) {
+    let res = match serde_json::to_string(&create_rag_response) {
         Ok(s) => {
             // return response
             let result = Response::builder()
@@ -1978,7 +2240,7 @@ pub(crate) async fn create_rag_handler(
         }
     };
 
-    info!(target: "stdout", "Send the doc_to_embeddings response.");
+    info!(target: "stdout", "Send the doc_to_embeddings response");
 
     res
 }
@@ -2234,4 +2496,54 @@ async fn get_qdrant_configs(
             Err(error::ServerError::Operation(err_msg.into()))
         }
     }
+}
+
+fn calculate_hash(s: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    s.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn normalize(scores: &HashMap<u64, f32>) -> HashMap<u64, f32> {
+    let min_score = scores.values().cloned().fold(f32::INFINITY, f32::min);
+    let max_score = scores.values().cloned().fold(f32::NEG_INFINITY, f32::max);
+    scores
+        .iter()
+        .map(|(&doc_id, &score)| {
+            let normalized_score = if max_score - min_score > 0.0 {
+                (score - min_score) / (max_score - min_score)
+            } else {
+                0.0
+            };
+            (doc_id, normalized_score)
+        })
+        .collect()
+}
+
+fn weighted_fusion(
+    bm25_scores: HashMap<u64, f32>,
+    embedding_scores: HashMap<u64, f32>,
+    alpha: f32,
+) -> HashMap<u64, f32> {
+    // Normalize BM25 and Embedding scores
+    let bm25_normalized = normalize(&bm25_scores);
+    let embedding_normalized = normalize(&embedding_scores);
+
+    // Get the union of all document IDs
+    let all_doc_ids: HashSet<u64> = bm25_scores
+        .keys()
+        .chain(embedding_scores.keys())
+        .cloned()
+        .collect();
+
+    // Calculate fusion scores
+    all_doc_ids
+        .into_iter()
+        .map(|doc_id| {
+            let bm25_score = *bm25_normalized.get(&doc_id).unwrap_or(&0.0);
+            let embedding_score = *embedding_normalized.get(&doc_id).unwrap_or(&0.0);
+            let final_score = alpha * bm25_score + (1.0 - alpha) * embedding_score;
+            (doc_id, final_score)
+        })
+        .collect()
 }
