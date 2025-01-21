@@ -25,6 +25,7 @@ log = { version = "0.4.21", features = ["std", "kv", "kv_serde"] }
 mime_guess = "2.0.4"
 multipart-2021 = "0.19.0"
 once_cell = "1.18"
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1"
@@ -33,7 +34,6 @@ url = "^2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "macro-diagnostics"] }
 walkdir = "2.5.0"
 wasi-logger = { version = "0.1.2", features = ["kv"] }
-reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
 
 [patch.crates-io]
 socket2 = { git = "https://github.com/second-state/socket2.git", branch = "v0.5.x" }
