@@ -2124,7 +2124,7 @@ pub(crate) async fn create_rag_handler(
     // create index for chunks
     let mut index_response: Option<IndexResponse> = None;
     if !kw_search_url.is_empty() {
-        let index_url = format!("{}/v1/index", &kw_search_url);
+        let index_url = format!("{}/v1/index/create", &kw_search_url);
         info!(target: "stdout", "index_url: {}", &index_url);
 
         let mut index_request = IndexRequest { documents: vec![] };
