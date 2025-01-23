@@ -353,8 +353,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.19.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#38d02270c3e6efe8348ee4481bb498730de1cbe4"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6562f25845b386ea315b61f0111dd75feda0d9a75881c480c4ac8bcafa2ecac6"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -610,8 +611,9 @@ dependencies = [
 
 [[package]]
 name = "endpoints"
-version = "0.24.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#38d02270c3e6efe8348ee4481bb498730de1cbe4"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6d86f457db15994ed147035c5541ee536975b8c1fa8ac2270617f2e9f3b7dad"
 dependencies = [
  "indexmap",
  "log 0.4.25",
@@ -1423,8 +1425,9 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
 name = "llama-core"
-version = "0.26.1"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#38d02270c3e6efe8348ee4481bb498730de1cbe4"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68e71b949d9270f6acc19833906f48f742e1555e4b29f4ee48fcde948868f22c"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
@@ -1990,7 +1993,8 @@ dependencies = [
 [[package]]
 name = "qdrant_rest_client"
 version = "0.2.1"
-source = "git+https://github.com/second-state/qdrant-rest-client.git#5c22993478cbe98fb95d8c11f3f1c71e4c939f74"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6a7c7870a26269e0149b3c915ecef7c19d366c1257526aba8e274201e12a576"
 dependencies = [
  "anyhow",
  "http 1.2.0",
