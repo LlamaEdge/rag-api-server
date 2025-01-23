@@ -354,7 +354,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.19.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#3e64533181284b2a155057002e3979d19d648e19"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#38d02270c3e6efe8348ee4481bb498730de1cbe4"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -531,9 +531,9 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crunchy"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+checksum = "43da5946c66ffcc7745f48db692ffbb10a83bfe0afd96235c5c2a4fb23994929"
 
 [[package]]
 name = "crypto-common"
@@ -611,7 +611,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.24.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#3e64533181284b2a155057002e3979d19d648e19"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#38d02270c3e6efe8348ee4481bb498730de1cbe4"
 dependencies = [
  "indexmap",
  "log 0.4.25",
@@ -1424,7 +1424,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 [[package]]
 name = "llama-core"
 version = "0.26.1"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#3e64533181284b2a155057002e3979d19d648e19"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=feat-kw-search#38d02270c3e6efe8348ee4481bb498730de1cbe4"
 dependencies = [
  "base64 0.22.1",
  "chat-prompts",
@@ -1989,9 +1989,8 @@ dependencies = [
 
 [[package]]
 name = "qdrant_rest_client"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94093f1a40b7875e09f57109b181f5cd6a8ab468cbd83578e7d990974b7416d1"
+version = "0.2.1"
+source = "git+https://github.com/second-state/qdrant-rest-client.git#5c22993478cbe98fb95d8c11f3f1c71e4c939f74"
 dependencies = [
  "anyhow",
  "http 1.2.0",
@@ -2393,9 +2392,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustix"
-version = "0.38.43"
+version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a78891ee6bf2340288408954ac787aa063d8e8817e9f53abb37c695c6d834ef6"
+checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
  "bitflags 2.8.0",
  "errno",
