@@ -131,6 +131,9 @@ struct Cli {
     /// URL of the keyword search service
     #[arg(long)]
     kw_search_url: Option<String>,
+    /// Whether to include usage in the stream response. Defaults to false.
+    #[arg(long, default_value = "false")]
+    include_usage: bool,
     /// Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`.
     #[arg(long, default_value = None, value_parser = clap::value_parser!(SocketAddr), group = "socket_address_group")]
     socket_addr: Option<SocketAddr>,
@@ -420,6 +423,9 @@ async fn main() -> Result<(), ServerError> {
         KW_SEARCH_CONFIG.set(kw_search_config).unwrap();
     }
 
+    // log include_usage
+    info!(target: "stdout", "include_usage: {}", cli.include_usage);
+
     // create metadata for chat model
     let chat_metadata = GgmlMetadataBuilder::new(
         cli.model_name[0].clone(),
@@ -440,6 +446,7 @@ async fn main() -> Result<(), ServerError> {
     .with_json_schema(cli.json_schema)
     .enable_plugin_log(true)
     .enable_debug_log(plugin_debug)
+    .include_usage(cli.include_usage)
     .build();
 
     let chat_model_info = ModelConfig {
