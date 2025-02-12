@@ -228,7 +228,7 @@ async fn main() -> Result<(), ServerError> {
         ));
     }
     let batch_sizes_str: String = cli
-        .ctx_size
+        .batch_size
         .iter()
         .map(|n| n.to_string())
         .collect::<Vec<String>>()
