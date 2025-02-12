@@ -566,17 +566,17 @@ git clone https://github.com/LlamaEdge/rag-api-server.git
 # Change the working directory
 cd rag-api-server
 
-# (Optional) Add the `wasm32-wasi` target to the Rust toolchain
-rustup target add wasm32-wasi
+# (Optional) Add the `wasm32-wasip1` target to the Rust toolchain
+rustup target add wasm32-wasip1
 
 # Build `rag-api-server.wasm` with the `http` support only, or
-cargo build --target wasm32-wasi --release
+cargo build --target wasm32-wasip1 --release
 
 # Build `rag-api-server.wasm` with both `http` and `https` support
-cargo build --target wasm32-wasi --release --features full
+cargo build --target wasm32-wasip1 --release --features full
 
 # Copy the `rag-api-server.wasm` to the root directory
-cp target/wasm32-wasi/release/rag-api-server.wasm .
+cp target/wasm32-wasip1/release/rag-api-server.wasm .
 ```
 
 To check the CLI options of the `rag-api-server` wasm app, you can run the following command:
