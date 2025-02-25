@@ -354,7 +354,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "chat-prompts"
 version = "0.21.1"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#210ebe9cfdf219439089c6d4250933331d06f198"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#c05fa29faad033f77dcc2e4854e416d4ddf9a5be"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -611,7 +611,7 @@ dependencies = [
 [[package]]
 name = "endpoints"
 version = "0.25.0"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#210ebe9cfdf219439089c6d4250933331d06f198"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#c05fa29faad033f77dcc2e4854e416d4ddf9a5be"
 dependencies = [
  "indexmap",
  "log 0.4.26",
@@ -1436,7 +1436,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 [[package]]
 name = "llama-core"
 version = "0.27.1"
-source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#210ebe9cfdf219439089c6d4250933331d06f198"
+source = "git+https://github.com/LlamaEdge/LlamaEdge.git?branch=dev#c05fa29faad033f77dcc2e4854e416d4ddf9a5be"
 dependencies = [
  "base64 0.22.1",
  "bitflags 2.8.0",
