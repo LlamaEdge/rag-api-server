@@ -527,11 +527,13 @@ pub(crate) async fn rag_query_handler(mut req: Request<Body>) -> Response<Body> 
         };
 
         // insert rag context into chat request
+        let rag_prompt = GLOBAL_RAG_PROMPT.get().cloned();
         if let Err(e) = RagPromptBuilder::build(
             &mut chat_request.messages,
             &[context],
             prompt_template.has_system_prompt(),
             rag_policy,
+            rag_prompt,
         ) {
             let err_msg = e.to_string();
 
@@ -842,6 +844,7 @@ impl MergeRagContext for RagPromptBuilder {
         context: &[String],
         has_system_prompt: bool,
         policy: MergeRagContextPolicy,
+        rag_prompt: Option<String>,
     ) -> ChatPromptsError::Result<()> {
         if messages.is_empty() {
             error!(target: "stdout", "No message in the chat request.");
@@ -878,7 +881,7 @@ impl MergeRagContext for RagPromptBuilder {
                 match &messages[0] {
                     ChatCompletionRequestMessage::System(message) => {
                         let system_message = {
-                            match GLOBAL_RAG_PROMPT.get() {
+                            match rag_prompt {
                                 Some(global_rag_prompt) => {
                                     // compose new system message content
                                     let content = format!(
@@ -921,7 +924,7 @@ impl MergeRagContext for RagPromptBuilder {
                         messages[0] = system_message;
                     }
                     _ => {
-                        let system_message = match GLOBAL_RAG_PROMPT.get() {
+                        let system_message = match rag_prompt {
                             Some(global_rag_prompt) => {
                                 // compose new system message content
                                 let content = format!(
