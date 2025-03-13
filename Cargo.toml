@@ -16,7 +16,7 @@ endpoints = { version = "=0.25.1", features = [
 futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
 futures-util = "0.3"
 hyper = { version = "0.14", features = ["full"] }
-llama-core = { version = "=0.28.1", features = [
+llama-core = { version = "=0.28.2", features = [
     "logging",
     "rag",
     "index",
