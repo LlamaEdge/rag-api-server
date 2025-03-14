@@ -843,12 +843,14 @@ impl MergeRagContext for RagPromptBuilder {
         has_system_prompt: bool,
         policy: MergeRagContextPolicy,
     ) -> ChatPromptsError::Result<()> {
+        // check messages
         if messages.is_empty() {
             error!(target: "stdout", "No message in the chat request.");
 
             return Err(ChatPromptsError::PromptError::NoMessages);
         }
 
+        // check context
         if context.is_empty() {
             let err_msg = "No context provided.";
 
@@ -858,13 +860,13 @@ impl MergeRagContext for RagPromptBuilder {
             return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
         }
 
+        // check rag policy
+        let mut policy = policy;
         if policy == MergeRagContextPolicy::SystemMessage && !has_system_prompt {
-            let err_msg = "The chat model does not support system message, while the given rag policy by '--policy' option requires that the RAG context is merged into system message. Please check the relevant CLI options and try again.";
-
             // log
-            error!(target: "stdout", "{}", &err_msg);
+            info!(target: "stdout", "The chat model does not support system message. Switch the currect rag policy to `last-user-message`");
 
-            return Err(ChatPromptsError::PromptError::Operation(err_msg.into()));
+            policy = MergeRagContextPolicy::LastUserMessage;
         }
         info!(target: "stdout", "rag_policy: {}", &policy);
 
@@ -954,7 +956,7 @@ impl MergeRagContext for RagPromptBuilder {
                 }
             }
             MergeRagContextPolicy::LastUserMessage => {
-                info!(target: "stdout", "Merge RAG context into last user message.");
+                info!(target: "stdout", "Merge RAG context into the latest user message.");
 
                 let len = messages.len();
                 match &messages.last() {
