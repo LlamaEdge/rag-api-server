@@ -591,68 +591,142 @@ To check the CLI options of the `rag-api-server` wasm app, you can run the follo
 Options:
   -m, --model-name <MODEL_NAME>
           Sets names for chat and embedding models. The names are separated by comma without space, for example, '--model-name Llama-2-7b,all-minilm'
+
   -a, --model-alias <MODEL_ALIAS>
-          Model aliases for chat and embedding models [default: default,embedding]
+          Model aliases for chat and embedding models
+
+          [default: default,embedding]
+
   -c, --ctx-size <CTX_SIZE>
-          Sets context sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--ctx-size 4096,384'. The first value is for the chat model, and the second is for the embedding model [default: 4096,384]
+          Sets context sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--ctx-size 4096,384'. The first value is for the chat model, and the second is for the embedding model
+
+          [default: 4096,384]
+
   -p, --prompt-template <PROMPT_TEMPLATE>
-          Sets prompt templates for chat and embedding models, respectively. The prompt templates are separated by comma without space, for example, '--prompt-template llama-2-chat,embedding'. The first value is for the chat model, and the second is for the embedding model [possible values: llama-2-chat, llama-3-chat, llama-3-tool, mistral-instruct, mistral-tool, mistrallite, mistral-small-chat, mistral-small-tool, openchat, codellama-instruct, codellama-super-instruct, human-assistant, vicuna-1.0-chat, vicuna-1.1-chat, vicuna-llava, chatml, chatml-tool, internlm-2-tool, baichuan-2, wizard-coder, zephyr, stablelm-zephyr, intel-neural, deepseek-chat, deepseek-coder, deepseek-chat-2, deepseek-chat-25, deepseek-chat-3, solar-instruct, phi-2-chat, phi-2-instruct, phi-3-chat, phi-3-instruct, phi-4-chat, gemma-instruct, octopus, glm-4-chat, groq-llama3-tool, mediatek-breeze, nemotron-chat, nemotron-tool, functionary-32, functionary-31, minicpmv, moxin-chat, falcon3, megrez, qwen2-vision, embedding, none]
+          Sets prompt templates for chat and embedding models, respectively. The prompt templates are separated by comma without space, for example, '--prompt-template llama-2-chat,embedding'. The first value is for the chat model, and the second is for the embedding model
+
+          [possible values: llama-2-chat, llama-3-chat, llama-3-tool, mistral-instruct, mistral-tool, mistrallite, mistral-small-chat, mistral-small-tool, openchat, codellama-instruct, codellama-super-instruct, human-assistant, vicuna-1.0-chat, vicuna-1.1-chat, vicuna-llava, chatml, chatml-tool, internlm-2-tool, baichuan-2, wizard-coder, zephyr, stablelm-zephyr, intel-neural, deepseek-chat, deepseek-coder, deepseek-chat-2, deepseek-chat-25, deepseek-chat-3, solar-instruct, phi-2-chat, phi-2-instruct, phi-3-chat, phi-3-instruct, phi-4-chat, gemma-instruct, gemma-3, octopus, glm-4-chat, groq-llama3-tool, mediatek-breeze, nemotron-chat, nemotron-tool, functionary-32, functionary-31, minicpmv, moxin-chat, falcon3, megrez, qwen2-vision, exaone-deep-chat, exaone-chat, embedding, tts, none]
+
   -r, --reverse-prompt <REVERSE_PROMPT>
           Halt generation at PROMPT, return control
+
   -n, --n-predict <N_PREDICT>
-          Number of tokens to predict, -1 = infinity, -2 = until context filled [default: -1]
+          Number of tokens to predict, -1 = infinity, -2 = until context filled
+
+          [default: -1]
+
   -g, --n-gpu-layers <N_GPU_LAYERS>
-          Number of layers to run on the GPU [default: 100]
+          Number of layers to run on the GPU
+
+          [default: 100]
+
       --split-mode <SPLIT_MODE>
-          Split the model across multiple GPUs. Possible values: `none` (use one GPU only), `layer` (split layers and KV across GPUs, default), `row` (split rows across GPUs) [default: layer]
+          Split the model across multiple GPUs. Possible values: `none` (use one GPU only), `layer` (split layers and KV across GPUs, default), `row` (split rows across GPUs)
+
+          [default: layer]
+
       --main-gpu <MAIN_GPU>
           The main GPU to use
+
       --tensor-split <TENSOR_SPLIT>
           How split tensors should be distributed accross GPUs. If None the model is not split; otherwise, a comma-separated list of non-negative values, e.g., "3,2" presents 60% of the data to GPU 0 and 40% to GPU 1
+
       --threads <THREADS>
-          Number of threads to use during computation [default: 2]
+          Number of threads to use during computation
+
+          [default: 2]
+
       --grammar <GRAMMAR>
-          BNF-like grammar to constrain generations (see samples in grammars/ dir) [default: ]
+          BNF-like grammar to constrain generations (see samples in grammars/ dir)
+
+          [default: ]
+
       --json-schema <JSON_SCHEMA>
           JSON schema to constrain generations (https://json-schema.org/), e.g. `{}` for any JSON object. For schemas w/ external $refs, use --grammar + example/json_schema_to_grammar.py instead
+
   -b, --batch-size <BATCH_SIZE>
-          Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model [default: 512,512]
+          Sets batch sizes for chat and embedding models, respectively. The sizes are separated by comma without space, for example, '--batch-size 128,64'. The first value is for the chat model, and the second is for the embedding model
+
+          [default: 512,512]
+
   -u, --ubatch-size <UBATCH_SIZE>
-          Sets physical maximum batch sizes for chat and/or embedding models. To run both chat and embedding models, the sizes should be separated by comma without space, for example, '--ubatch-size 512,512'. The first value is for the chat model, and the second for the embedding model [default: 512,512]
+          Sets physical maximum batch sizes for chat and/or embedding models. To run both chat and embedding models, the sizes should be separated by comma without space, for example, '--ubatch-size 512,512'. The first value is for the chat model, and the second for the embedding model
+
+          [default: 512,512]
+
       --rag-prompt <RAG_PROMPT>
           Custom rag prompt
+
       --rag-policy <POLICY>
-          Strategy for merging RAG context into chat messages [default: system-message] [possible values: system-message, last-user-message]
+          Strategy for merging RAG context into chat messages
+
+          [default: system-message]
+
+          Possible values:
+          - system-message:    Merge RAG context into the system message
+          - last-user-message: Merge RAG context into the last user message
+
       --qdrant-url <QDRANT_URL>
-          URL of Qdrant REST Service [default: http://127.0.0.1:6333]
+          URL of Qdrant REST Service
+
+          [default: http://127.0.0.1:6333]
+
       --qdrant-collection-name <QDRANT_COLLECTION_NAME>
-          Name of Qdrant collection [default: default]
+          Name of Qdrant collection
+
+          [default: default]
+
       --qdrant-limit <QDRANT_LIMIT>
-          Max number of retrieved result (no less than 1) [default: 5]
+          Max number of retrieved result (no less than 1)
+
+          [default: 5]
+
       --qdrant-score-threshold <QDRANT_SCORE_THRESHOLD>
-          Minimal score threshold for the search result [default: 0.4]
+          Minimal score threshold for the search result
+
+          [default: 0.4]
+
       --chunk-capacity <CHUNK_CAPACITY>
-          Maximum number of tokens each chunk contains [default: 100]
+          Maximum number of tokens each chunk contains
+
+          [default: 100]
+
       --context-window <CONTEXT_WINDOW>
-          Maximum number of user messages used in the retrieval [default: 1]
+          Maximum number of user messages used in the retrieval
+
+          [default: 1]
+
       --kw-search-url <KW_SEARCH_URL>
           URL of the keyword search service
+
       --include-usage
           Whether to include usage in the stream response. Defaults to false
+
       --socket-addr <SOCKET_ADDR>
           Socket address of LlamaEdge-RAG API Server instance. For example, `0.0.0.0:8080`
+
       --port <PORT>
-          Port number [default: 8080]
+          Port number
+
+          [default: 8080]
+
       --web-ui <WEB_UI>
-          Root path for the Web UI files [default: chatbot-ui]
+          Root path for the Web UI files
+
+          [default: chatbot-ui]
+
       --log-prompts
           Deprecated. Print prompt strings to stdout
+
       --log-stat
           Deprecated. Print statistics to stdout
+
       --log-all
           Deprecated. Print all log information to stdout
+
   -h, --help
-          Print help (see more with '--help')
+          Print help (see a summary with '-h')
+
   -V, --version
           Print version
   ```
