@@ -353,9 +353,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "387ae26f3d4653005141fed4458ddde1530d664724262b65a0fb4a782f8e1a90"
+checksum = "2275187708402067a0e4ec28ae903b94a77fbaa94bb75b8b7cfc08dad66cdb8b"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -1437,9 +1437,9 @@ checksum = "23fb14cb19457329c82206317a5663005a4d404783dc74f4252769b0d5f42856"
 
 [[package]]
 name = "llama-core"
-version = "0.28.6"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "656e56bda08601b2554d6fe0f499c564f509d0a37e180e8ab1b8a642569af61c"
+checksum = "b70e595a98e3098f7d2d49e2c82ab73be1433dd9a2a28287f275ac3eb9fe39cd"
 dependencies = [
  "base64 0.22.1",
  "bitflags 2.9.0",
