@@ -353,9 +353,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chat-prompts"
-version = "0.26.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2275187708402067a0e4ec28ae903b94a77fbaa94bb75b8b7cfc08dad66cdb8b"
+checksum = "66018608d64000a070b93ebe393d46eca125a023fd8652a9757b683f33f80925"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -1437,9 +1437,9 @@ checksum = "23fb14cb19457329c82206317a5663005a4d404783dc74f4252769b0d5f42856"
 
 [[package]]
 name = "llama-core"
-version = "0.29.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b70e595a98e3098f7d2d49e2c82ab73be1433dd9a2a28287f275ac3eb9fe39cd"
+checksum = "f645ffba65150766e6b0afdbc993f988d7c377bdcf2fd02755f2a13594e5ef0f"
 dependencies = [
  "base64 0.22.1",
  "bitflags 2.9.0",
@@ -1457,6 +1457,7 @@ dependencies = [
  "text-splitter",
  "thiserror 1.0.69",
  "tiktoken-rs",
+ "tokio",
  "uuid",
  "walkdir",
  "wasi-logger",
